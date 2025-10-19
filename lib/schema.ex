@@ -441,11 +441,17 @@ defmodule Schema do
 
   @spec export_base_event() :: map()
   def export_base_event() do
-    Repo.export_base_event()
-    |> reduce_attributes()
-    |> Map.update!(:attributes, fn attributes ->
-      Utils.remove_profiles(attributes) |> Enum.into(%{})
-    end)
+    # TODO: Stripping profiles when none are supplied (including nil)
+    #       is inconsistent with export_classes.
+    #       Remove Utils.remove_profiles step?
+    # TODO: original:
+    # Repo.export_base_event()
+    # |> reduce_attributes()
+    # |> Map.update!(:attributes, fn attributes ->
+    #   Utils.remove_profiles(attributes) |> Enum.into(%{})
+    # end)
+    # TODO: Fixed (?)
+    Repo.export_base_event() |> reduce_attributes()
   end
 
   @spec export_base_event(Repo.profiles_t() | nil) :: map()

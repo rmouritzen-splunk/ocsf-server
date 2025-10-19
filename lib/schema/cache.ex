@@ -66,12 +66,12 @@ defmodule Schema.Cache do
     categories = JsonReader.read_categories() |> update_categories()
     dictionary = JsonReader.read_dictionary() |> update_dictionary()
 
-    {base_event, classes, all_classes, observable_type_id_map} =
-      read_classes(categories[:attributes])
-
+    {classes, all_classes, observable_type_id_map} = read_classes(categories[:attributes])
     {objects, all_objects, observable_type_id_map} = read_objects(observable_type_id_map)
 
-    dictionary = Utils.update_dictionary(dictionary, base_event, classes, objects)
+    dictionary =
+      Utils.update_dictionary(dictionary, Map.get(classes, :base_event), classes, objects)
+
     observable_type_id_map = observables_from_dictionary(dictionary, observable_type_id_map)
 
     dictionary_attributes = dictionary[:attributes]
@@ -99,11 +99,8 @@ defmodule Schema.Cache do
       |> update_classes(objects)
       |> final_check(dictionary_attributes)
 
-    base_event = final_check(:base_event, base_event, dictionary_attributes)
-
     no_req_set = MapSet.new()
     {profiles, no_req_set} = fix_entities(profiles, no_req_set, "profile")
-    {base_event, no_req_set} = fix_entity(base_event, no_req_set, :base_event, "class")
     {classes, no_req_set} = fix_entities(classes, no_req_set, "class")
     {objects, no_req_set} = fix_entities(objects, no_req_set, "object")
 
@@ -122,7 +119,8 @@ defmodule Schema.Cache do
       profiles: profiles,
       categories: categories,
       dictionary: dictionary,
-      base_event: base_event,
+      # TODO: Bug fix for base_event. We want fully processed base_event.
+      base_event: classes[:base_event],
       classes: classes,
       all_classes: all_classes,
       objects: objects,
@@ -389,7 +387,7 @@ defmodule Schema.Cache do
       |> Stream.filter(fn {class_key, class} -> !hidden_class?(class_key, class) end)
       |> Enum.into(%{}, fn class_tuple -> enrich_class(class_tuple, categories) end)
 
-    {Map.get(classes, :base_event), classes, all_classes, observable_type_id_map}
+    {classes, all_classes, observable_type_id_map}
   end
 
   defp read_objects(observable_type_id_map) do
@@ -1094,7 +1092,7 @@ defmodule Schema.Cache do
 
   defp merge_profiles(:profiles, v1, nil), do: v1
   defp merge_profiles(:profiles, nil, v2), do: v2
-  defp merge_profiles(:profiles, v1, v2), do: Enum.concat(v1, v2) |> Enum.uniq()
+  defp merge_profiles(:profiles, v1, v2), do: Enum.concat(v1, v2) |> Enum.uniq() |> Enum.sort()
   defp merge_profiles(_profiles, v1, nil), do: v1
   defp merge_profiles(_profiles, _v1, v2), do: v2
 
@@ -1303,7 +1301,7 @@ defmodule Schema.Cache do
   end
 
   defp merge_profiles(p1, p2) do
-    Enum.concat(p1, p2) |> Enum.uniq()
+    Enum.concat(p1, p2) |> Enum.uniq() |> Enum.sort()
   end
 
   defp update_dictionary(dictionary) do

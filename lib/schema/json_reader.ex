@@ -285,54 +285,65 @@ defmodule Schema.JsonReader do
   end
 
   # used by dictionary and categories
-  defp merge_ext_file(acc, ext, file) do
+  defp merge_ext_file(base_item, ext, file) do
     path = Path.join(ext[:path], file)
 
     if File.regular?(path) do
       Logger.debug("read ext file: [#{ext[:name]}] #{path}")
 
-      ext_data = read_json_file(path)
+      ext_item = read_json_file(path)
 
-      Map.update!(acc, :attributes, fn attributes ->
+      Map.update!(base_item, :attributes, fn base_attributes ->
         ext_type = ext[:name]
         ext_uid = ext[:uid]
 
         Map.merge(
-          attributes,
-          Enum.into(ext_data[:attributes], %{}, fn {name, value} = attribute ->
-            if value[:overwrite] == true do
-              case attributes[name] do
-                nil ->
-                  attribute
+          base_attributes,
+          # Create ext attributes merged with base attributes.
+          # This base attributes not in ext attributes will not be present.
+          # Merging with base attributes create union of both.
+          Enum.into(
+            ext_item[:attributes],
+            %{},
+            fn {ext_attribute_name, ext_attribute} = ext_attribute_tuple ->
+              if ext_attribute[:overwrite] == true do
+                case base_attributes[ext_attribute_name] do
+                  nil ->
+                    ext_attribute_tuple
 
-                a ->
-                  {name, Map.merge(a, value)}
+                  base_attribute ->
+                    # Base attributes have ext attribute
+                    # Shallowly merge, preferring ext_attribute
+                    {ext_attribute_name, Map.merge(base_attribute, ext_attribute)}
+                end
+              else
+                # ext_attribute does not have overwrite, so add to base but scope the
+                #  attribute name to avoid a potential collision with a base attribute
+                {
+                  Utils.to_uid(ext_type, ext_attribute_name),
+                  add_extension(ext_attribute, ext_type, ext_uid)
+                }
               end
-            else
-              {
-                Utils.to_uid(ext_type, name),
-                add_extension(value, ext_type, ext_uid)
-              }
             end
-          end)
+          )
         )
       end)
-      |> merge_ext_types(ext_data)
+      |> merge_ext_types(ext_item)
     else
-      acc
+      base_item
     end
   end
 
-  defp merge_ext_types(acc, ext) do
-    if acc[:types] != nil and ext[:types] != nil do
-      update_in(acc, [:types, :attributes], fn types ->
+  defp merge_ext_types(base_item, ext) do
+    if base_item[:types] != nil and ext[:types] != nil do
+      update_in(base_item, [:types, :attributes], fn types ->
         Utils.deep_merge(
           types,
           get_in(ext, [:types, :attributes])
         )
       end)
     else
-      acc
+      base_item
     end
   end
 
@@ -441,7 +452,23 @@ defmodule Schema.JsonReader do
         attribute
 
       file ->
-        read_included_file(resolver, file) |> Utils.deep_merge(Map.delete(attribute, @include))
+        # TODO: Bug fix. Avoid creating extraneous mapping of :attributes to []
+        #       inside of an attribute detail.
+        read_included_enum_file(resolver, file)
+        |> Utils.deep_merge(Map.delete(attribute, @include))
+    end
+  end
+
+  defp read_included_enum_file(resolver, file) do
+    {ext, path} = resolver.(file)
+    Logger.debug("[#{ext}] include enum file #{path}")
+
+    case cache_get(path) do
+      [] ->
+        read_json_file(path) |> cache_put(path)
+
+      [{_, cached}] ->
+        cached
     end
   end
 
