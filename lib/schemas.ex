@@ -12,6 +12,12 @@ defmodule Schemas do
   This module provides function to work with multiple schema versions.
   """
 
+  # TODO: Convert to support compiled schema files.
+  #       Initial beta release of 4.x will be run alongside existing servers
+  #       probably with its own URL somehow, perhaps simply be adding a suffix,
+  #       for example "1.7.0-dev-beta-browser".
+  #       Thus initially Schemas this will need to support schema directories _and_ schema files.
+
   use Agent
 
   require Logger

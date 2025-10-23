@@ -76,7 +76,7 @@ defmodule SchemaWeb.PageController do
 
     profiles = SchemaController.get_profiles(params)
 
-    case Schema.profile(profiles, name) do
+    case profiles[name] do
       nil ->
         send_resp(conn, 404, "Not Found: #{name}")
 
@@ -253,8 +253,12 @@ defmodule SchemaWeb.PageController do
 
   defp parse_profiles_from_params(params) do
     case params["profiles"] do
-      nil -> nil
-      "" -> MapSet.new()
+      nil ->
+        nil
+
+      "" ->
+        MapSet.new()
+
       profiles_string ->
         profiles_string
         |> String.split(",")

@@ -31,8 +31,13 @@ config :schema_server, :phoenix_swagger,
 config :phoenix_swagger, json_library: Jason
 
 # Configures the location of the schema files
+
+# TODO: remove home
 config :schema_server, Schema.Application, home: System.get_env("SCHEMA_DIR") || "../ocsf-schema"
+# TODO: remove extension
 config :schema_server, Schema.Application, extension: System.get_env("SCHEMA_EXTENSION")
+
+config :schema_server, Schema.Application, schema_file: System.get_env("SCHEMA_FILE")
 config :schema_server, Schema.Application, schema_home: System.get_env("SCHEMA_HOME")
 
 # Import environment specific config. This must remain at the bottom

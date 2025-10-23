@@ -59,10 +59,19 @@ defmodule Schema.Repo do
     Agent.get(__MODULE__, fn schema -> Cache.categories(schema) end)
   end
 
+  require Logger
+
   def categories(extensions) do
     Agent.get(__MODULE__, fn schema ->
-      Cache.categories(schema)
-      |> Map.update!(:attributes, fn attributes -> filter(attributes, extensions) end)
+      # Cache.categories(schema)
+      # |> Map.update!(:attributes, fn attributes -> filter(attributes, extensions) end)
+
+      categories = Cache.categories(schema)
+      attributes = categories[:attributes]
+      Logger.info("categories - attribute keys: #{inspect(Map.keys(attributes))}")
+      attributes = filter(attributes, extensions)
+      Logger.info("categories - filtered attribute keys: #{inspect(Map.keys(attributes))}")
+      Map.put(categories, :attributes, attributes)
     end)
   end
 
