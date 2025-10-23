@@ -79,24 +79,36 @@ defmodule SchemaWeb.PageView do
         ""
 
       list ->
-        applicable_profiles = Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
+        applicable_profiles =
+          Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
 
         if Enum.empty?(applicable_profiles) do
           ""
         else
-          badges = Enum.map(applicable_profiles, fn name ->
-            caption = get_in(profiles, [name, :caption]) || name
-            path = Routes.static_path(conn, "/profiles/" <> name)
-            [
-              "<span class='profile-badge'>",
-              "<a href='", path, "' title='Profile: ", caption, "'>",
-              "<i class='fas fa-tag'></i> ", caption,
-              "</a>",
-              "</span>"
-            ]
-          end)
+          badges =
+            Enum.map(applicable_profiles, fn name ->
+              caption = get_in(profiles, [name, :caption]) || name
+              path = Routes.static_path(conn, "/profiles/" <> name)
 
-          ["<div class='profile-badges'><span class='profile-label'>Applicable Profiles:</span> ", Enum.intersperse(badges, " "), "</div>"]
+              [
+                "<span class='profile-badge'>",
+                "<a href='",
+                path,
+                "' title='Profile: ",
+                caption,
+                "'>",
+                "<i class='fas fa-tag'></i> ",
+                caption,
+                "</a>",
+                "</span>"
+              ]
+            end)
+
+          [
+            "<div class='profile-badges'><span class='profile-label'>Applicable Profiles:</span> ",
+            Enum.intersperse(badges, " "),
+            "</div>"
+          ]
         end
     end
   end
@@ -104,7 +116,9 @@ defmodule SchemaWeb.PageView do
   @spec get_applicable_profiles(map(), map()) :: list()
   def get_applicable_profiles(data, profiles) do
     case data[:profiles] || [] do
-      [] -> []
+      [] ->
+        []
+
       list ->
         Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
         |> Enum.to_list()
@@ -114,10 +128,12 @@ defmodule SchemaWeb.PageView do
   @spec format_applicable_profiles_json(list()) :: String.t()
   def format_applicable_profiles_json(applicable_profiles) do
     case applicable_profiles do
-      [] -> "[]"
+      [] ->
+        "[]"
+
       profiles ->
         profiles
-        |> Enum.map(&("\"#{&1}\""))
+        |> Enum.map(&"\"#{&1}\"")
         |> Enum.join(",")
         |> (fn str -> "[#{str}]" end).()
     end
@@ -168,9 +184,15 @@ defmodule SchemaWeb.PageView do
       end
 
     case field[:extension] do
-      nil -> name
-      extension when extension != "" -> name <> " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>"
-      _ -> name
+      nil ->
+        name
+
+      extension when extension != "" ->
+        name <>
+          " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>"
+
+      _ ->
+        name
     end
   end
 
@@ -205,19 +227,35 @@ defmodule SchemaWeb.PageView do
     # Add subtle source indicators with icons matching the sidebar
     source_indicators = []
 
-    source_indicators = case entity[:extension] do
-      nil -> source_indicators
-      extension when extension != "" ->
-        ["<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>" | source_indicators]
-      _ -> source_indicators
-    end
+    source_indicators =
+      case entity[:extension] do
+        nil ->
+          source_indicators
 
-    source_indicators = case entity[:profile] do
-      nil -> source_indicators
-      profile when profile != "" ->
-        ["<sup class='source-indicator profile-indicator' data-toggle='tooltip' title='From #{profile} profile'><i class='fas fa-tag'></i></sup>" | source_indicators]
-      _ -> source_indicators
-    end
+        extension when extension != "" ->
+          [
+            "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>"
+            | source_indicators
+          ]
+
+        _ ->
+          source_indicators
+      end
+
+    source_indicators =
+      case entity[:profile] do
+        nil ->
+          source_indicators
+
+        profile when profile != "" ->
+          [
+            "<sup class='source-indicator profile-indicator' data-toggle='tooltip' title='From #{profile} profile'><i class='fas fa-tag'></i></sup>"
+            | source_indicators
+          ]
+
+        _ ->
+          source_indicators
+      end
 
     if Enum.empty?(source_indicators) do
       caption
@@ -857,22 +895,22 @@ defmodule SchemaWeb.PageView do
   def dictionary_links(conn, attribute_name, links) do
     groups = Enum.group_by(links, fn link -> link[:group] end)
 
-    commons_html = dictionary_links_common_to_html(conn, groups[:common])
+    commons_html = dictionary_links_common_to_html(conn, groups["common"])
 
     classes_html =
       if Enum.empty?(commons_html) do
-        dictionary_links_class_to_html(conn, attribute_name, groups[:class])
+        dictionary_links_class_to_html(conn, attribute_name, groups["class"])
       else
         Enum.intersperse(
           [
             "Referenced by all classes",
-            dictionary_links_class_updated_to_html(conn, attribute_name, groups[:class])
+            dictionary_links_class_updated_to_html(conn, attribute_name, groups["class"])
           ],
           "<br>"
         )
       end
 
-    objects_html = links_object_to_html(conn, attribute_name, groups[:object], :collapse)
+    objects_html = links_object_to_html(conn, attribute_name, groups["object"], :collapse)
 
     Enum.reject([commons_html, classes_html, objects_html], &Enum.empty?/1)
     |> Enum.intersperse("<hr>")
@@ -1238,9 +1276,9 @@ defmodule SchemaWeb.PageView do
   def object_links(conn, name, links, list_presentation) do
     groups = Enum.group_by(links, fn link -> link[:group] end)
 
-    commons_html = object_links_common_to_html(conn, groups[:common], list_presentation)
-    classes_html = object_links_class_to_html(conn, name, groups[:class], list_presentation)
-    objects_html = object_links_object_to_html(conn, name, groups[:object], list_presentation)
+    commons_html = object_links_common_to_html(conn, groups["common"], list_presentation)
+    classes_html = object_links_class_to_html(conn, name, groups["class"], list_presentation)
+    objects_html = object_links_object_to_html(conn, name, groups["object"], list_presentation)
 
     Enum.reject([commons_html, classes_html, objects_html], &Enum.empty?/1)
     |> Enum.intersperse("<hr>")
@@ -1483,12 +1521,12 @@ defmodule SchemaWeb.PageView do
   def profile_links(conn, profile_name, links, list_presentation) do
     groups = Enum.group_by(links, fn link -> link[:group] end)
 
-    commons_html = profile_links_common_to_html(conn, groups[:common])
+    commons_html = profile_links_common_to_html(conn, groups["common"])
 
     classes_html =
-      profile_links_class_to_html(conn, profile_name, groups[:class], list_presentation)
+      profile_links_class_to_html(conn, profile_name, groups["class"], list_presentation)
 
-    objects_html = links_object_to_html(conn, profile_name, groups[:object], list_presentation)
+    objects_html = links_object_to_html(conn, profile_name, groups["object"], list_presentation)
 
     Enum.reject([commons_html, classes_html, objects_html], &Enum.empty?/1)
     |> Enum.intersperse("<hr>")

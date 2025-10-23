@@ -15,8 +15,11 @@ defmodule Schema do
   Contexts are also responsible for managing your data, regardless
   if it comes from the database, an external API or others.
   """
+  # TODO: remove
   alias Schema.Repo
+  # TODO: remove
   alias Schema.Cache
+  alias Schema.SingleRepo
   alias Schema.Utils
 
   @dialyzer :no_improper_lists
@@ -25,10 +28,10 @@ defmodule Schema do
     Returns the schema version string.
   """
   @spec version :: String.t()
-  def version(), do: Repo.version()
+  def version(), do: SingleRepo.version()
 
   @spec parsed_version :: Utils.version_or_error_t()
-  def parsed_version(), do: Repo.parsed_version()
+  def parsed_version(), do: SingleRepo.parsed_version()
 
   @spec build_version :: String.t()
   def build_version() do
@@ -42,29 +45,20 @@ defmodule Schema do
     Returns the schema extensions.
   """
   @spec extensions :: map()
-  def extensions(), do: Cache.extensions()
+  def extensions(), do: SingleRepo.extensions()
 
   @doc """
     Returns the schema profiles.
   """
   @spec profiles :: map()
-  def profiles(), do: Repo.profiles()
+  def profiles(), do: SingleRepo.profiles()
 
-  @spec profiles(Repo.extensions_t()) :: map()
+  @spec profiles(Utils.string_set_t() | nil) :: map()
   def profiles(extensions) do
-    Repo.profiles(extensions)
+    SingleRepo.profiles() |> Utils.filter_items_by_extensions(extensions)
   end
 
-  def profile(profiles, name) do
-    case profiles[name] do
-      nil ->
-        nil
-
-      profile ->
-        Map.update!(profile, :attributes, &Schema.Utils.add_sibling_of_to_attributes/1)
-    end
-  end
-
+  # TODO: replace (?)
   @doc """
     Reloads the event schema without the extensions.
   """
@@ -81,15 +75,19 @@ defmodule Schema do
     Returns the event categories.
   """
   @spec categories :: map()
-  def categories(), do: Repo.categories()
+  def categories(), do: SingleRepo.categories()
+
+  require Logger
 
   @doc """
     Returns the event categories defined in the given extension set.
   """
   def categories(extensions) do
-    Map.update(Repo.categories(extensions), :attributes, %{}, fn attributes ->
-      Enum.into(attributes, %{}, fn {name, _category} ->
-        {name, category(extensions, name)}
+    SingleRepo.categories()
+    |> Map.update!(:attributes, fn attributes ->
+      Utils.filter_items_by_extensions(attributes, extensions)
+      |> Enum.into(%{}, fn {category_name, _category} ->
+        {category_name, category(extensions, category_name)}
       end)
     end)
   end
@@ -97,42 +95,45 @@ defmodule Schema do
   @doc """
     Returns a single category with its classes.
   """
-  @spec category(atom | String.t()) :: nil | Cache.category_t()
+  @spec category(atom | String.t()) :: nil | Utils.category_t()
   def category(id), do: get_category(Utils.to_uid(id))
 
-  @spec category(Repo.extensions_t(), String.t()) :: nil | Cache.category_t()
+  @spec category(Utils.string_set_t(), String.t()) :: nil | Utils.category_t()
   def category(extensions, id), do: get_category(extensions, Utils.to_uid(id))
 
-  @spec category(Repo.extensions_t(), String.t(), String.t()) :: nil | Cache.category_t()
-  def category(extensions, extension, id),
-    do: get_category(extensions, Utils.to_uid(extension, id))
+  @spec category(Utils.string_set_t(), String.t(), String.t()) :: nil | Utils.category_t()
+  def category(extensions, extension, id) do
+    get_category(extensions, Utils.to_uid(extension, id))
+  end
 
   @doc """
     Returns the attribute dictionary.
   """
-  @spec dictionary() :: Cache.dictionary_t()
-  def dictionary(), do: Repo.dictionary()
+  @spec dictionary() :: Utils.dictionary_t()
+  def dictionary(), do: SingleRepo.dictionary()
 
   @doc """
     Returns the attribute dictionary including the extension.
   """
-  @spec dictionary(Repo.extensions_t()) :: Cache.dictionary_t()
+  @spec dictionary(Utils.string_set_t()) :: Utils.dictionary_t()
   def dictionary(extensions) do
-    Repo.dictionary(extensions)
-    |> Map.update!(:attributes, &Schema.Utils.add_sibling_of_to_attributes/1)
+    SingleRepo.dictionary()
+    |> Map.update!(:attributes, fn attributes ->
+      Utils.filter_items_by_extensions(attributes, extensions)
+    end)
   end
 
   @doc """
     Returns the data types defined in dictionary.
   """
   @spec data_types :: map()
-  def data_types(), do: Repo.data_types()
+  def data_types(), do: SingleRepo.dictionary()[:types]
 
   @spec data_type?(binary(), binary() | list(binary())) :: boolean()
   def data_type?(type, type), do: true
 
   def data_type?(type, base_type) when is_binary(base_type) do
-    types = Map.get(Repo.data_types(), :attributes)
+    types = Map.get(data_types(), :attributes)
 
     case Map.get(types, String.to_atom(type)) do
       nil -> false
@@ -141,7 +142,7 @@ defmodule Schema do
   end
 
   def data_type?(type, base_types) do
-    types = Map.get(Repo.data_types(), :attributes)
+    types = Map.get(data_types(), :attributes)
 
     case Map.get(types, String.to_atom(type)) do
       nil ->
@@ -157,39 +158,51 @@ defmodule Schema do
     Returns all event classes.
   """
   @spec classes() :: map()
-  def classes(), do: Repo.classes()
+  def classes(), do: SingleRepo.classes()
 
-  @spec classes(Repo.extensions_t()) :: map()
-  def classes(extensions), do: Repo.classes(extensions)
+  @spec classes(Utils.string_set_t()) :: map()
+  def classes(extensions) do
+    SingleRepo.classes() |> Utils.filter_items_by_extensions(extensions)
+  end
 
-  @spec classes(Repo.extensions_t(), Repo.profiles_t()) :: map()
+  @spec classes(Utils.string_set_t(), Utils.string_set_t()) :: map()
   def classes(extensions, profiles) do
-    extensions
-    |> Repo.classes()
+    classes(extensions)
     |> apply_profiles(profiles, MapSet.size(profiles))
   end
 
   @spec all_classes() :: map()
-  def all_classes(), do: Repo.all_classes()
+  def all_classes(), do: SingleRepo.all_classes()
 
   @spec all_objects() :: map()
-  def all_objects(), do: Repo.all_objects()
+  def all_objects(), do: SingleRepo.all_objects()
 
   @doc """
     Returns a single event class.
   """
-  @spec class(atom() | String.t()) :: nil | Cache.class_t()
-  def class(id), do: Repo.class(Utils.to_uid(id))
+  @spec class(atom() | String.t()) :: nil | Utils.class_t()
+  def class(id) do
+    SingleRepo.classes()[Utils.to_uid(id)]
+  end
 
+  # TODO: Remove extension parameter functions once everything is working
+  #       (no longer necessary)
   @spec class(nil | String.t(), String.t()) :: nil | map()
-  def class(extension, id),
-    do: Repo.class(Utils.to_uid(extension, id))
+  def class(_extension, id) do
+    SingleRepo.classes()[Utils.to_uid(id)]
+  end
 
+  # TODO: Remove extension parameter functions once everything is working
+  #       (no longer necessary)
   @spec class(String.t() | nil, String.t(), Repo.profiles_t() | nil) :: nil | map()
-  def class(extension, id, nil), do: class(extension, id)
+  def class(_extension, id, nil) do
+    SingleRepo.classes()[Utils.to_uid(id)]
+  end
 
-  def class(extension, id, profiles) do
-    case class(extension, id) do
+  # TODO: Remove extension parameter functions once everything is working
+  #       (no longer necessary)
+  def class(_extension, id, profiles) do
+    case class(nil, id) do
       nil ->
         nil
 
@@ -200,20 +213,25 @@ defmodule Schema do
     end
   end
 
+  # TODO: Looks like the *_ex family of function are not needed as they really just flesh out
+  #       classes and objects with dictionary attributes.
   @doc """
     Returns a single event class with the embedded objects.
   """
-  @spec class_ex(atom() | String.t()) :: nil | Cache.class_t()
-  def class_ex(id),
-    do: Repo.class_ex(Utils.to_uid(id))
+  @spec class_ex(atom() | String.t()) :: nil | Utils.class_t()
+  def class_ex(id) do
+    Repo.class_ex(Utils.to_uid(id))
+  end
 
   @spec class_ex(nil | String.t(), String.t()) :: nil | map()
-  def class_ex(extension, id),
-    do: Repo.class_ex(Utils.to_uid(extension, id))
+  def class_ex(extension, id) do
+    Repo.class_ex(Utils.to_uid(extension, id))
+  end
 
   @spec class_ex(String.t() | nil, String.t(), Repo.profiles_t() | nil) :: nil | map()
-  def class_ex(extension, id, nil),
-    do: class_ex(extension, id)
+  def class_ex(extension, id, nil) do
+    class_ex(extension, id)
+  end
 
   def class_ex(extension, id, profiles) do
     case class_ex(extension, id) do

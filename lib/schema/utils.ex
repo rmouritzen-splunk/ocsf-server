@@ -11,6 +11,11 @@ defmodule Schema.Utils do
   @moduledoc """
   Defines map helper functions.
   """
+  @type class_t() :: map()
+  @type object_t() :: map()
+  @type category_t() :: map()
+  @type dictionary_t() :: map()
+
   @type link_t() :: %{
           :group => :common | :class | :object,
           :type => String.t(),
@@ -25,12 +30,42 @@ defmodule Schema.Utils do
           :patch => integer(),
           optional(:prerelease) => nil | String.t()
         }
-
   @type version_error_t() :: {:error, String.t(), any()}
-
   @type version_or_error_t() :: version_t() | version_error_t()
 
+  @type string_set_t() :: MapSet.t(String.t())
+
   require Logger
+
+  @spec filter_items_by_extensions(map(), string_set_t() | nil) :: map()
+  def filter_items_by_extensions(items, nil) do
+    items
+  end
+
+  def filter_items_by_extensions(items, extensions) do
+    Enum.filter(items, fn {_key, item} ->
+      extension = item[:extension]
+      extension == nil or MapSet.member?(extensions, extension)
+    end)
+    |> filter_items_links_by_extension(extensions)
+  end
+
+  @spec filter_items_links_by_extension([{atom(), map()}], string_set_t()) :: map()
+  defp filter_items_links_by_extension(items, extensions) do
+    Enum.into(items, %{}, fn {item_key, item} ->
+      links = filter_item_links_by_extension(item[:_links], extensions)
+      {item_key, Map.put(item, :_links, links)}
+    end)
+  end
+
+  @spec filter_item_links_by_extension(nil | [map()], string_set_t()) :: [map()]
+  defp filter_item_links_by_extension(nil, _extensions), do: []
+
+  defp filter_item_links_by_extension(links, extensions) do
+    Enum.filter(links, fn link ->
+      MapSet.member?(extensions, link[:extension])
+    end)
+  end
 
   @spec to_uid(binary() | atom()) :: atom
   def to_uid(name) when is_binary(name) do
@@ -40,6 +75,8 @@ defmodule Schema.Utils do
   def to_uid(name) when is_atom(name) do
     name
   end
+
+  # TODO: OLD STUFF BELOW. Move things needed by new implementation above this line.
 
   @spec to_uid(binary() | nil, binary() | atom()) :: atom()
   def to_uid(nil, name) when is_atom(name) do
