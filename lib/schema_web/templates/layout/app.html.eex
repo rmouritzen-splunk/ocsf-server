@@ -286,7 +286,7 @@ limitations under the License.
 </div>
 
 <div class="footer">
-  OCSF Server version <%= Schema.build_version() %>.
+  OCSF Server version <%= Schema.server_version() %>.
   Copyright &copy; OCSF a Series of LF Projects, LLC.
   For web site terms of use, trademark policy and other project policies please see <a href="https://lfprojects.org">LF Projects, LLC</a>.
   This content includes the ICD Schema developed by Symantec, a division of Broadcom.

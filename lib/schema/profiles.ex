@@ -45,6 +45,8 @@ defmodule Schema.Profiles do
     Enum.filter(attributes, fn {_k, v} -> Map.has_key?(v, :profile) == false end)
   end
 
+  # TODO: OLD STUFF BELOW. Move things needed by new implementation above this line.
+
   @doc """
     Checks items (classes or objects), ensuring that each all profiles defined in each item are
     defined in profiles. Adds each properly define profile to profile's _links.

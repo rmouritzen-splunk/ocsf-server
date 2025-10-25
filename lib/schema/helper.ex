@@ -11,6 +11,11 @@ defmodule Schema.Helper do
   @moduledoc """
   Provides helper functions to enrich the event data.
   """
+
+  # TODO: Explore what this actually does.
+  #       If useful, optimize to get entire schema once rather than making
+  #       many calls across process boundaries (calls to Schema).
+
   require Logger
 
   def enrich(data, enum_text, observables) when is_map(data) do
@@ -31,7 +36,7 @@ defmodule Schema.Helper do
   defp enrich_class(class_uid, data, enum_text, _observables) do
     Logger.debug("enrich class: #{class_uid}")
 
-    # if observables == "true", do: 
+    # if observables == "true", do:
 
     case Schema.find_class(class_uid) do
       # invalid event class ID

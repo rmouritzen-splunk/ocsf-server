@@ -68,7 +68,7 @@ defmodule Schema.Generator do
     }
   end
 
-  @spec generate_sample_event(Schema.Cache.class_t(), Schema.Repo.profiles_t() | nil) :: map()
+  @spec generate_sample_event(Utils.class_t(), Utils.string_set_t() | nil) :: map()
   def generate_sample_event(class, nil) do
     Logger.debug("generate sample event: #{inspect(class[:name])}")
 
@@ -81,10 +81,15 @@ defmodule Schema.Generator do
     end)
 
     Process.put(:profiles, profiles)
-    generate_event(class, profiles, MapSet.size(profiles))
+
+    Map.update!(class, :attributes, fn attributes ->
+      Utils.filter_attributes_by_profiles(attributes, profiles)
+    end)
+    |> generate_sample_event()
+    |> add_profiles(MapSet.to_list(profiles))
   end
 
-  @spec generate_sample_event(Schema.Cache.object_t(), Schema.Repo.profiles_t() | nil) :: map()
+  @spec generate_sample_event(Utils.object_t(), Utils.string_set_t() | nil) :: map()
   def generate_sample_object(type, nil) do
     Logger.debug("generate sample object: #{type[:name]})")
 
@@ -97,23 +102,11 @@ defmodule Schema.Generator do
     end)
 
     Process.put(:profiles, profiles)
-    generate_sample_object(type, profiles, MapSet.size(profiles))
-  end
 
-  defp generate_event(class, _profiles, 0) do
-    Map.update!(class, :attributes, fn attributes ->
-      Utils.remove_profiles(attributes)
+    Map.update!(type, :attributes, fn attributes ->
+      Utils.filter_attributes_by_profiles(attributes, profiles)
     end)
-    |> generate_sample_event()
-    |> add_profiles([])
-  end
-
-  defp generate_event(class, profiles, size) do
-    Map.update!(class, :attributes, fn attributes ->
-      Utils.apply_profiles(attributes, profiles, size)
-    end)
-    |> generate_sample_event()
-    |> add_profiles(MapSet.to_list(profiles))
+    |> generate_sample_object()
   end
 
   defp add_profiles(data, profiles) do
@@ -145,20 +138,6 @@ defmodule Schema.Generator do
         |> Map.delete(:raw_data)
         |> Map.delete(:unmapped)
     end
-  end
-
-  defp generate_sample_object(type, _profiles, 0) do
-    Map.update!(type, :attributes, fn attributes ->
-      Utils.remove_profiles(attributes)
-    end)
-    |> generate_sample_object()
-  end
-
-  defp generate_sample_object(type, profiles, size) do
-    Map.update!(type, :attributes, fn attributes ->
-      Utils.apply_profiles(attributes, profiles, size)
-    end)
-    |> generate_sample_object()
   end
 
   defp generate_sample_object(type) do
