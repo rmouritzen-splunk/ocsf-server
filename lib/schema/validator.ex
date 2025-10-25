@@ -47,7 +47,7 @@ defmodule Schema.Validator do
   end
 
   defp validate_type(type, data, profiles) when is_map(data) do
-    attributes = type[:attributes] |> Utils.apply_profiles(profiles)
+    attributes = type[:attributes] |> Utils.filter_attributes_by_profiles(profiles)
 
     Enum.reduce(attributes, %{}, fn {name, attribute}, acc ->
       value = data[Atom.to_string(name)]

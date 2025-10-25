@@ -161,10 +161,9 @@ defmodule SchemaWeb.PageController do
   """
   @spec classes(Plug.Conn.t(), any) :: Plug.Conn.t()
   def classes(conn, %{"id" => id} = params) do
-    extension = params["extension"]
     profiles = parse_profiles_from_params(params)
 
-    case Schema.class(extension, id, profiles) do
+    case Schema.class_filter_profiles(id, profiles) do
       nil ->
         send_resp(conn, 404, "Not Found: #{id}")
 
@@ -172,7 +171,6 @@ defmodule SchemaWeb.PageController do
         data =
           data
           |> sort_attributes_by_key()
-          |> Map.put(:key, Schema.Utils.to_uid(extension, id))
 
         render(conn, "class.html",
           extensions: Schema.extensions(),
@@ -205,7 +203,6 @@ defmodule SchemaWeb.PageController do
         data =
           data
           |> sort_attributes_by_key()
-          |> Map.put(:key, Schema.Utils.to_uid(params["extension"], id))
 
         render(conn, "object.html",
           extensions: Schema.extensions(),
@@ -245,6 +242,7 @@ defmodule SchemaWeb.PageController do
     Map.update!(map, :attributes, &sort_by_descoped_key/1)
   end
 
+  # TODO: remove - this may not be needed with new implementation
   defp sort_by_descoped_key(map) do
     Enum.sort(map, fn {k1, _}, {k2, _} ->
       Schema.Utils.descope(k1) <= Schema.Utils.descope(k2)

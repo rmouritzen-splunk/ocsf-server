@@ -18,26 +18,13 @@ defmodule Schema.Application do
   def start(_type, _args) do
     env = Application.get_env(:schema_server, __MODULE__)
 
-    # TODO: remove schema_dir
-    schema_dir = Keyword.get(env, :home)
-
     schema_file = Keyword.get(env, :schema_file)
     schemas_dir = Keyword.get(env, :schema_home)
-
-    # TODO: remove extensions
-    extensions =
-      case Keyword.get(env, :extension) do
-        nil -> []
-        ext -> String.split(ext, ",")
-      end
 
     # List all child processes to be supervised
     children = [
       {Schemas, schemas_dir},
       {Schema.SingleRepo, schema_file},
-      # TODO: remove JsonReader
-      {Schema.JsonReader, [schema_dir, extensions]},
-      Schema.Repo,
       Schema.Generator,
 
       # Start the endpoint when the application starts

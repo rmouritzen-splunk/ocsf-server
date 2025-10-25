@@ -27,10 +27,3 @@ config :schema_server, SchemaWeb.Endpoint,
     port: System.get_env("URL_PORT") || 8000,
     path: System.get_env("SCHEMA_PATH") || "/"
   ]
-
-# TODO: remove - these seem redundant
-# Configures the location of the schema files
-config :schema_server, Schema.Application, home: System.get_env("SCHEMA_DIR")
-config :schema_server, Schema.Application, extension: System.get_env("SCHEMA_EXTENSION")
-
-config :schema_server, Schema.Application, schema_home: System.get_env("SCHEMA_HOME")

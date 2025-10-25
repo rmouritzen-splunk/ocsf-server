@@ -389,7 +389,7 @@ defmodule SchemaWeb.SchemaController do
   @spec get_profiles(map) :: map
   def get_profiles(params) do
     extensions = parse_options(extensions(params))
-    Schema.profiles(extensions)
+    Schema.profiles_filter_extensions(extensions)
   end
 
   @doc """
@@ -465,7 +465,7 @@ defmodule SchemaWeb.SchemaController do
 
   @spec categories(map()) :: map()
   def categories(params) do
-    parse_options(extensions(params)) |> Schema.categories()
+    parse_options(extensions(params)) |> Schema.categories_filter_extensions()
   end
 
   @doc """
@@ -508,11 +508,10 @@ defmodule SchemaWeb.SchemaController do
 
   @spec category_classes(map()) :: map() | nil
   def category_classes(params) do
-    name = params["id"]
-    extension = extension(params)
+    id = params["id"]
     extensions = parse_options(extensions(params))
 
-    Schema.category(extensions, extension, name)
+    Schema.category_filter_extensions(id, extensions)
   end
 
   @doc """
@@ -602,9 +601,7 @@ defmodule SchemaWeb.SchemaController do
   end
 
   defp class(conn, id, params) do
-    extension = extension(params)
-
-    case Schema.class(extension, id, parse_options(profiles(params))) do
+    case Schema.class_filter_profiles(id, parse_options(profiles(params))) do
       nil ->
         send_json_resp(conn, 404, %{error: "Event class #{id} not found"})
 
@@ -654,10 +651,10 @@ defmodule SchemaWeb.SchemaController do
 
     case parse_options(profiles(params)) do
       nil ->
-        Schema.classes(extensions)
+        Schema.classes_filter_extensions(extensions)
 
       profiles ->
-        Schema.classes(extensions, profiles)
+        Schema.classes_filter_extensions_profiles(extensions, profiles)
     end
   end
 
@@ -734,16 +731,15 @@ defmodule SchemaWeb.SchemaController do
 
   @spec objects(map) :: map
   def objects(params) do
-    parse_options(extensions(params)) |> Schema.objects()
+    parse_options(extensions(params)) |> Schema.objects_filter_extensions()
   end
 
   @spec object(map) :: map() | nil
   def object(%{"id" => id} = params) do
     profiles = parse_options(profiles(params))
-    extension = extension(params)
     extensions = parse_options(extensions(params))
 
-    Schema.object(extensions, extension, id, profiles)
+    Schema.object_filter_extensions_profiles(id, extensions, profiles)
   end
 
   # -------------------
@@ -777,7 +773,7 @@ defmodule SchemaWeb.SchemaController do
   def export_schema(conn, params) do
     profiles = parse_options(profiles(params))
     extensions = parse_options(extensions(params))
-    data = Schema.export_schema(extensions, profiles)
+    data = Schema.export_schema_filter_extensions_profiles(extensions, profiles)
     send_json_resp(conn, data)
   end
 
@@ -802,7 +798,7 @@ defmodule SchemaWeb.SchemaController do
   def export_classes(conn, params) do
     profiles = parse_options(profiles(params))
     extensions = parse_options(extensions(params))
-    classes = Schema.export_classes(extensions, profiles)
+    classes = Schema.export_classes_filter_extensions_profiles(extensions, profiles)
     send_json_resp(conn, classes)
   end
 
@@ -825,7 +821,7 @@ defmodule SchemaWeb.SchemaController do
 
   def export_base_event(conn, params) do
     profiles = parse_options(profiles(params))
-    base_event = Schema.export_base_event(profiles)
+    base_event = Schema.export_base_event_filter_profiles(profiles)
 
     send_json_resp(conn, base_event)
   end
@@ -851,7 +847,7 @@ defmodule SchemaWeb.SchemaController do
   def export_objects(conn, params) do
     profiles = parse_options(profiles(params))
     extensions = parse_options(extensions(params))
-    objects = Schema.export_objects(extensions, profiles)
+    objects = Schema.export_objects_filter_extensions_profiles(extensions, profiles)
     send_json_resp(conn, objects)
   end
 
@@ -901,8 +897,7 @@ defmodule SchemaWeb.SchemaController do
   end
 
   def class_ex(id, params) do
-    extension = extension(params)
-    Schema.class_ex(extension, id, parse_options(profiles(params)))
+    Schema.class_filter_profiles(id, parse_options(profiles(params)))
   end
 
   @doc """
@@ -947,10 +942,9 @@ defmodule SchemaWeb.SchemaController do
 
   def object_ex(id, params) do
     profiles = parse_options(profiles(params))
-    extension = extension(params)
     extensions = parse_options(extensions(params))
 
-    Schema.object_ex(extensions, extension, id, profiles)
+    Schema.object_filter_extensions_profiles(id, extensions, profiles)
   end
 
   # ---------------------------------------------
@@ -1331,10 +1325,9 @@ defmodule SchemaWeb.SchemaController do
   end
 
   defp sample_class(conn, id, options) do
-    extension = extension(options)
     profiles = profiles(options) |> parse_options()
 
-    case Schema.class(extension, id) do
+    case Schema.class(id) do
       nil ->
         send_json_resp(conn, 404, %{error: "Event class #{id} not found"})
 
@@ -1384,10 +1377,9 @@ defmodule SchemaWeb.SchemaController do
 
   @spec sample_object(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def sample_object(conn, %{"id" => id} = options) do
-    extension = extension(options)
     profiles = profiles(options) |> parse_options()
 
-    case Schema.object(extension, id) do
+    case Schema.object(id) do
       nil ->
         send_json_resp(conn, 404, %{error: "Object #{id} not found"})
 
@@ -1483,9 +1475,9 @@ defmodule SchemaWeb.SchemaController do
   defp verbose(_), do: 1
 
   defp profiles(params), do: params["profiles"]
-  defp extension(params), do: params["extension"]
   defp extensions(params), do: params["extensions"]
 
+  @spec parse_options(nil | String.t()) :: nil | Schema.Utils.string_set_t()
   defp parse_options(nil), do: nil
   defp parse_options(""), do: MapSet.new()
 

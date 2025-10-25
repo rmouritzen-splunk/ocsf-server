@@ -8,6 +8,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO: remove this module - this should not be needed with new implementation
 defmodule Schema.Types do
   @moduledoc """
   Schema types and helpers functions to make unique identifiers.
@@ -48,5 +49,4 @@ defmodule Schema.Types do
   def type_name(class, name) do
     class <> ": " <> name
   end
-
 end

@@ -13,9 +13,20 @@ defmodule Schema.SingleRepo do
   alias Schema.Utils
   require Logger
 
+  @spec start_link(any()) :: :ignore | {:error, any()} | {:ok, pid()}
   def start_link(schema_file) do
     GenServer.start_link(__MODULE__, schema_file, name: __MODULE__)
   end
+
+  # The state in this module is a map:
+  #   %{
+  #     schema: <map() - schema with extra information needed for schema browser UI>,
+  #     clean_schema: <map() - schema without extra schema browser UI information},
+  #     parsed_version: <Utils.vertion_t()>,
+  #     schema_file: <String.t() - path to loaded schema>
+  #   }
+  # The clean schema is created from the browser schema once when initializing to simplify
+  # processing and avoid sending the larger schema across Elixir (Erlang) process boundaries.
 
   @impl true
   @spec init(String.t()) :: {:ok, map()} | {:error, String.t()}
@@ -49,10 +60,17 @@ defmodule Schema.SingleRepo do
                           {Atom.to_string(name), profile}
                         end)
                       end)
-                      |> Map.put(:schema_file, schema_file)
-                      |> Map.put(:parsed_version, parsed_version)
 
-                    {:ok, schema}
+                    clean_schema = clean_schema(schema)
+
+                    state = %{
+                      schema: schema,
+                      clean_schema: clean_schema,
+                      parsed_version: parsed_version,
+                      schema_file: schema_file
+                    }
+
+                    {:ok, state}
                 end
 
               {:error, reason} ->
@@ -110,45 +128,123 @@ defmodule Schema.SingleRepo do
     {:error, "Schema file does not contain a JSON object"}
   end
 
-  @spec schema() :: map()
-  def schema(), do: GenServer.call(__MODULE__, nil)
-
-  @spec version() :: String.t()
-  def version(), do: GenServer.call(__MODULE__, :version)
+  defp clean_schema(schema) do
+    # The following are not enriched with schema browser UI information,
+    # so do not need to be cleaned:
+    #   schema[:version] (this is just a string)
+    #   schema[:categories]
+    #   schema[:extensions]
+    #   schema[:dictionary][:types]
+    %{
+      version: schema[:version],
+      categories: schema[:categories],
+      dictionary: schema[:dictionary] |> Utils.clean_item(),
+      classes: Utils.clean_items(schema[:classes]),
+      objects: Utils.clean_items(schema[:objects]),
+      profiles: Utils.clean_items(schema[:profiles]),
+      extensions: schema[:extensions]
+    }
+  end
 
   @spec parsed_version() :: Utils.version_t()
   def parsed_version(), do: GenServer.call(__MODULE__, :parsed_version)
 
+  @spec schema() :: map()
+  def schema(), do: GenServer.call(__MODULE__, {:schema, nil})
+
+  @spec version() :: String.t()
+  def version(), do: GenServer.call(__MODULE__, {:schema, :version})
+
   @spec categories() :: map()
-  def categories(), do: GenServer.call(__MODULE__, :categories)
+  def categories(), do: GenServer.call(__MODULE__, {:schema, :categories})
 
   @spec dictionary() :: map()
-  def dictionary(), do: GenServer.call(__MODULE__, :dictionary)
+  def dictionary(), do: GenServer.call(__MODULE__, {:schema, :dictionary})
 
   @spec classes() :: map()
-  def classes(), do: GenServer.call(__MODULE__, :classes)
+  def classes(), do: GenServer.call(__MODULE__, {:schema, :classes})
 
   @spec objects() :: map()
-  def objects(), do: GenServer.call(__MODULE__, :objects)
+  def objects(), do: GenServer.call(__MODULE__, {:schema, :objects})
 
   @spec profiles() :: map()
-  def profiles(), do: GenServer.call(__MODULE__, :profiles)
+  def profiles(), do: GenServer.call(__MODULE__, {:schema, :profiles})
 
   @spec extensions() :: map()
-  def extensions(), do: GenServer.call(__MODULE__, :extensions)
+  def extensions(), do: GenServer.call(__MODULE__, {:schema, :extensions})
 
   @spec all_classes() :: map()
-  def all_classes(), do: GenServer.call(__MODULE__, :all_classes)
+  def all_classes(), do: GenServer.call(__MODULE__, {:schema, :all_classes})
 
   @spec all_objects() :: map()
-  def all_objects(), do: GenServer.call(__MODULE__, :all_objects)
+  def all_objects(), do: GenServer.call(__MODULE__, {:schema, :all_objects})
 
-  @impl true
-  def handle_call(nil, _from, schema) do
-    {:reply, schema, schema}
+  @spec clean_schema() :: map()
+  def clean_schema(), do: GenServer.call(__MODULE__, {:clean_schema, nil})
+
+  @spec clean_categories() :: map()
+  def clean_categories(), do: GenServer.call(__MODULE__, {:clean_schema, :categories})
+
+  @spec clean_dictionary() :: map()
+  def clean_dictionary(), do: GenServer.call(__MODULE__, {:clean_schema, :dictionary})
+
+  @spec clean_classes() :: map()
+  def clean_classes(), do: GenServer.call(__MODULE__, {:clean_schema, :classes})
+
+  @spec clean_objects() :: map()
+  def clean_objects(), do: GenServer.call(__MODULE__, {:clean_schema, :objects})
+
+  @spec clean_profiles() :: map()
+  def clean_profiles(), do: GenServer.call(__MODULE__, {:clean_schema, :profiles})
+
+  @spec reload() :: :ok | {:error, String.t()}
+  def reload() do
+    GenServer.call(__MODULE__, {:reload, nil})
   end
 
-  def handle_call(key, _from, schema) when is_atom(key) do
-    {:reply, schema[key], schema}
+  @spec reload(String.t()) :: :ok | {:error, String.t()}
+  def reload(path) do
+    GenServer.call(__MODULE__, {:reload, path})
+  end
+
+  @impl true
+  def handle_call(:parsed_version, _from, state) do
+    {:reply, state[:parsed_version], state}
+  end
+
+  def handle_call({:schema, nil}, _from, state) do
+    {:reply, state[:schema], state}
+  end
+
+  def handle_call({:clean_schema, nil}, _from, state) do
+    {:reply, state[:clean_schema], state}
+  end
+
+  def handle_call({:schema, key}, _from, state) when is_atom(key) do
+    {:reply, state[:schema][key], state}
+  end
+
+  def handle_call({:clean_schema, key}, _from, state) when is_atom(key) do
+    {:reply, state[:clean_schema][key], state}
+  end
+
+  def handle_call({:reload, nil}, _from, state) do
+    case init(state[:schema_file]) do
+      {:ok, state} ->
+        {:reply, :ok, state}
+
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call({:reload, path}, _from, state) do
+    case init(path) do
+      {:ok, state} ->
+        {:reply, :ok, state}
+
+      error ->
+        {:reply, error, state}
+    end
   end
 end
