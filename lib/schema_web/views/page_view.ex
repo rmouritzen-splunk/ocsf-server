@@ -385,8 +385,7 @@ defmodule SchemaWeb.PageView do
       true ->
         item = all_items[item_key]
         extends = item[:extends]
-        extension = item[:extension]
-        {parent_item_key, _parent_time} = Schema.Utils.find_parent(all_items, extends, extension)
+        {parent_item_key, _parent_time} = Schema.Utils.find_parent(all_items, extends)
 
         build_hierarchy(
           parent_item_key,
@@ -1286,7 +1285,7 @@ defmodule SchemaWeb.PageView do
 
   defp link_attributes(link) do
     attribute_keys = link[:attribute_keys]
-    attribute_keys_size = if attribute_keys == nil, do: 0, else: MapSet.size(attribute_keys)
+    attribute_keys_size = if attribute_keys == nil, do: 0, else: Enum.count(attribute_keys)
 
     case attribute_keys_size do
       0 ->

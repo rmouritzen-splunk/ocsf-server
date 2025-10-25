@@ -308,111 +308,63 @@ defmodule Schema.Validator2 do
       version = metadata["version"]
 
       case Schema.Utils.parse_version(version) do
-        {:error, error_message, _original} ->
-          add_error(
-            response,
-            "version_invalid_format",
-            "Event version #{inspect(version)} at \"metadata.version\" has invalid format:" <>
-              " #{error_message}." <>
-              " Version must be in semantic versioning format (see https://semver.org/).",
-            %{
-              attribute_path: "metadata.version",
-              attribute: "version",
-              value: version,
-              expected_regex: Schema.Utils.version_regex_source()
-            }
-          )
-
         parsed_version ->
           schema_version = Schema.version()
+          parsed_schema_version = Schema.parsed_version()
 
-          case Schema.parsed_version() do
-            {:error, error_message, _} ->
-              # Comparing against invalid schema version - this is an OCSF schema bug
-              add_error(
-                response,
-                "server_version_invalid_format",
-                "Server's schema version #{inspect(schema_version)} has invalid format:" <>
-                  " #{error_message}." <>
-                  " Version must be in semantic versioning format (see https://semver.org/)." <>
-                  " Please fix the schema version.",
-                %{
-                  value: schema_version,
-                  expected_regex: Schema.Utils.version_regex_source()
-                }
-              )
+          cond do
+            parsed_version == parsed_schema_version ->
+              response
 
-            parsed_schema_version ->
+            Schema.Utils.version_sorter(parsed_version, parsed_schema_version) ->
+              # Event version is before the schema version (equal is covered above).
               cond do
-                parsed_version == parsed_schema_version ->
-                  response
-
-                Schema.Utils.version_sorter(parsed_version, parsed_schema_version) ->
-                  # Event version is before the schema version (equal is covered above).
-                  cond do
-                    Schema.Utils.version_is_initial_development?(parsed_version) ->
-                      # Initial development version -- versions a 0 major version like 0.1.0 -- do
-                      # not have backwards compatible guarantees.
-                      add_error(
-                        response,
-                        "version_incompatible_initial_development",
-                        "Event version \"#{version}\" at \"metadata.version\" is an initial" <>
-                          " development version and is incompatible with schema version" <>
-                          " \"#{schema_version}\". Initial development versions do not have" <>
-                          " compatibility guarantees (see https://semver.org/)." <>
-                          " This can result in incorrect validation messages.",
-                        %{
-                          attribute_path: "metadata.version",
-                          attribute: "version",
-                          value: version
-                        }
-                      )
-
-                    Schema.Utils.version_is_prerelease?(parsed_version) ->
-                      # Generally, earlier prerelease versions are incompatible with later versions.
-                      add_error(
-                        response,
-                        "version_incompatible_prerelease",
-                        "Event version \"#{version}\" at \"metadata.version\" is a prerelease" <>
-                          " version and is incompatible with schema version" <>
-                          " \"#{schema_version}\". Prerelease versions are generally" <>
-                          " incompatible with released versions and future prerelease versions" <>
-                          " (see https://semver.org/)." <>
-                          " This can result in incorrect validation messages.",
-                        %{
-                          attribute_path: "metadata.version",
-                          attribute: "version",
-                          value: version
-                        }
-                      )
-
-                    true ->
-                      # event version is simply before - this might be OK so issue warning
-                      add_warning(
-                        response,
-                        "version_earlier",
-                        "Event version \"#{version}\" at \"metadata.version\" is earlier than" <>
-                          " schema version \"#{schema_version}\"." <>
-                          " Validating against later schema versions can yield deprecation" <>
-                          " warnings and other (minor) validation messages that would not occur" <>
-                          " when validating against the same version.",
-                        %{
-                          attribute_path: "metadata.version",
-                          attribute: "version",
-                          value: version
-                        }
-                      )
-                  end
-
-                true ->
-                  # Fallback... event event version is after (later/newer) than schema version
+                Schema.Utils.version_is_initial_development?(parsed_version) ->
+                  # Initial development version -- versions a 0 major version like 0.1.0 -- do
+                  # not have backwards compatible guarantees.
                   add_error(
                     response,
-                    "version_incompatible_later",
-                    "Event version \"#{version}\" at \"metadata.version\" is incompatible with" <>
-                      " schema version \"#{schema_version}\" because it is a later version." <>
-                      " This can result in missing validation messages (false negatives)" <>
-                      " and incorrect validation messages.",
+                    "version_incompatible_initial_development",
+                    "Event version \"#{version}\" at \"metadata.version\" is an initial" <>
+                      " development version and is incompatible with schema version" <>
+                      " \"#{schema_version}\". Initial development versions do not have" <>
+                      " compatibility guarantees (see https://semver.org/)." <>
+                      " This can result in incorrect validation messages.",
+                    %{
+                      attribute_path: "metadata.version",
+                      attribute: "version",
+                      value: version
+                    }
+                  )
+
+                Schema.Utils.version_is_prerelease?(parsed_version) ->
+                  # Generally, earlier prerelease versions are incompatible with later versions.
+                  add_error(
+                    response,
+                    "version_incompatible_prerelease",
+                    "Event version \"#{version}\" at \"metadata.version\" is a prerelease" <>
+                      " version and is incompatible with schema version" <>
+                      " \"#{schema_version}\". Prerelease versions are generally" <>
+                      " incompatible with released versions and future prerelease versions" <>
+                      " (see https://semver.org/)." <>
+                      " This can result in incorrect validation messages.",
+                    %{
+                      attribute_path: "metadata.version",
+                      attribute: "version",
+                      value: version
+                    }
+                  )
+
+                true ->
+                  # event version is simply before - this might be OK so issue warning
+                  add_warning(
+                    response,
+                    "version_earlier",
+                    "Event version \"#{version}\" at \"metadata.version\" is earlier than" <>
+                      " schema version \"#{schema_version}\"." <>
+                      " Validating against later schema versions can yield deprecation" <>
+                      " warnings and other (minor) validation messages that would not occur" <>
+                      " when validating against the same version.",
                     %{
                       attribute_path: "metadata.version",
                       attribute: "version",
@@ -420,6 +372,22 @@ defmodule Schema.Validator2 do
                     }
                   )
               end
+
+            true ->
+              # Fallback... event event version is after (later/newer) than schema version
+              add_error(
+                response,
+                "version_incompatible_later",
+                "Event version \"#{version}\" at \"metadata.version\" is incompatible with" <>
+                  " schema version \"#{schema_version}\" because it is a later version." <>
+                  " This can result in missing validation messages (false negatives)" <>
+                  " and incorrect validation messages.",
+                %{
+                  attribute_path: "metadata.version",
+                  attribute: "version",
+                  value: version
+                }
+              )
           end
       end
     else
@@ -582,6 +550,7 @@ defmodule Schema.Validator2 do
               if is_binary(name) do
                 # Split the name but preserve array notation within each segment
                 name_parts = split_observable_name(name)
+
                 referenced_definition =
                   get_referenced_definition(name_parts, class, profiles)
 

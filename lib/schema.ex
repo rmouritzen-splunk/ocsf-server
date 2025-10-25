@@ -429,7 +429,7 @@ defmodule Schema do
           classes
           |> Stream.filter(fn {_name, class} ->
             cat = Map.get(class, :category)
-            cat == category_uid or Utils.to_uid(class[:extension], cat) == id
+            cat == category_uid or Utils.to_uid(cat) == id
           end)
           |> Stream.map(fn {name, class} ->
             class =

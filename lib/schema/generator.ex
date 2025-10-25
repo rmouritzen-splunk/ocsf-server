@@ -15,7 +15,6 @@ defmodule Schema.Generator do
   use Agent
 
   alias __MODULE__
-  alias Schema.Types
   alias Schema.Utils
 
   require Logger
@@ -128,7 +127,7 @@ defmodule Schema.Generator do
       activity_id ->
         uid =
           if activity_id >= 0 do
-            Types.type_uid(data[:class_uid], activity_id)
+            Utils.type_uid(data[:class_uid], activity_id)
           else
             @other
           end

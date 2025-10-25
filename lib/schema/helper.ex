@@ -93,7 +93,7 @@ defmodule Schema.Helper do
       activity_id ->
         uid =
           if activity_id >= 0 do
-            Schema.Types.type_uid(class_uid, activity_id)
+            Schema.Utils.type_uid(class_uid, activity_id)
           else
             0
           end
