@@ -290,23 +290,19 @@ defmodule Schema do
         }
   def export_schema_filter_extensions_profiles(extensions, profiles) do
     schema = SingleRepo.clean_schema()
-    # Oddly, class and object attributes are not filtered
 
     classes =
       schema[:classes]
-      |> Utils.filter_items_by_extensions(extensions)
+      |> Utils.filter_clean_items_by_extensions(extensions)
       |> Utils.filter_items_attributes_by_profiles(profiles)
 
     objects =
       schema[:objects]
-      |> Utils.filter_items_by_extensions(extensions)
+      |> Utils.filter_clean_items_by_extensions(extensions)
       |> Utils.filter_items_attributes_by_profiles(profiles)
 
     dictionary_attributes =
-      schema[:dictionary][:attributes]
-      |> Map.update!(:attributes, fn attributes ->
-        Utils.filter_items_by_extensions(attributes, extensions)
-      end)
+      Utils.filter_clean_items_by_extensions(schema[:dictionary][:attributes], extensions)
 
     %{
       base_event: classes[:base_event],
@@ -332,12 +328,12 @@ defmodule Schema do
         ) :: map()
   def export_classes_filter_extensions_profiles(extensions, nil) do
     SingleRepo.clean_classes()
-    |> Utils.filter_items_by_extensions(extensions)
+    |> Utils.filter_clean_items_by_extensions(extensions)
   end
 
   def export_classes_filter_extensions_profiles(extensions, profiles) do
     SingleRepo.clean_classes()
-    |> Utils.filter_items_by_extensions(extensions)
+    |> Utils.filter_clean_items_by_extensions(extensions)
     |> Utils.filter_items_attributes_by_profiles(profiles)
   end
 
@@ -357,12 +353,12 @@ defmodule Schema do
         ) :: map()
   def export_objects_filter_extensions_profiles(extensions, nil) do
     SingleRepo.clean_objects()
-    |> Utils.filter_items_by_extensions(extensions)
+    |> Utils.filter_clean_items_by_extensions(extensions)
   end
 
   def export_objects_filter_extensions_profiles(extensions, profiles) do
     SingleRepo.clean_objects()
-    |> Utils.filter_items_by_extensions(extensions)
+    |> Utils.filter_clean_items_by_extensions(extensions)
     |> Utils.filter_items_attributes_by_profiles(profiles)
   end
 

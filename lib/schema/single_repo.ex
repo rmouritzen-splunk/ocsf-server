@@ -46,10 +46,10 @@ defmodule Schema.SingleRepo do
                     }
 
                   parsed_version ->
-                    Logger.info("Schema file       : #{schema_file}")
-                    Logger.info("Schema version    : #{schema[:version]}")
+                    Logger.info("Schema file         : #{schema_file}")
+                    Logger.info("Schema version      : #{schema[:version]}")
                     ext_json = Jason.encode!(schema[:extensions], pretty: true)
-                    Logger.info("Schema extensions : #{ext_json}")
+                    Logger.info("Schema extension(s) : #{ext_json}")
 
                     schema =
                       schema

@@ -108,6 +108,23 @@ defmodule Schema.Utils do
     end)
   end
 
+  @spec filter_clean_items_by_extensions(map() | nil, string_set_t() | nil) :: map() | nil
+  def filter_clean_items_by_extensions(nil, _extensions) do
+    nil
+  end
+
+  def filter_clean_items_by_extensions(items, nil) do
+    items
+  end
+
+  def filter_clean_items_by_extensions(items, extensions) do
+    Enum.filter(items, fn {_key, item} ->
+      extension = item[:extension]
+      extension == nil or MapSet.member?(extensions, extension)
+    end)
+    |> Enum.into(%{})
+  end
+
   @doc """
   Filter attributes in items based on the given profiles.
   """
