@@ -1,6 +1,8 @@
 defmodule SchemaWeb.PageView do
   use SchemaWeb, :view
 
+  alias Schema.Utils
+
   @at_least_one_symbol "†"
   @just_one_symbol "‡"
   @unknown_constraint_symbol "*"
@@ -284,7 +286,7 @@ defmodule SchemaWeb.PageView do
         {nil, nil}
 
       Map.has_key?(entity, :observable) ->
-        observable_type_id = Schema.Utils.observable_type_id_to_atom(entity[:observable])
+        observable_type_id = Utils.observable_type_id_to_atom(entity[:observable])
         enum_details = observable_type_id_map[observable_type_id]
 
         {
@@ -294,12 +296,12 @@ defmodule SchemaWeb.PageView do
 
       Map.has_key?(entity, :type) ->
         # Check if this is a dictionary type
-        type = schema[:dictionary][:types][:attributes][Schema.Utils.to_uid(entity[:type])]
+        type = schema[:dictionary][:types][:attributes][Utils.to_uid(entity[:type])]
         type_observable = type[:observable]
 
         cond do
           type_observable ->
-            observable_type_id = Schema.Utils.observable_type_id_to_atom(type_observable)
+            observable_type_id = Utils.observable_type_id_to_atom(type_observable)
             enum_details = observable_type_id_map[observable_type_id]
 
             {
@@ -309,11 +311,11 @@ defmodule SchemaWeb.PageView do
 
           Map.has_key?(entity, :object_type) ->
             # Check if this object is an observable
-            object_key = Schema.Utils.to_uid(entity[:object_type])
+            object_key = Utils.to_uid(entity[:object_type])
             object_observable = objects[object_key][:observable]
 
             if object_observable do
-              observable_type_id = Schema.Utils.observable_type_id_to_atom(object_observable)
+              observable_type_id = Utils.observable_type_id_to_atom(object_observable)
               enum_details = observable_type_id_map[observable_type_id]
 
               {
@@ -335,14 +337,14 @@ defmodule SchemaWeb.PageView do
 
   @spec format_attribute_name(String.t() | atom()) :: any
   def format_attribute_name(name) do
-    Schema.Utils.descope(name)
+    Utils.descope(name)
   end
 
   @spec format_class_attribute_source(map(), atom(), map()) :: String.t()
   def format_class_attribute_source(schema, class_key, field) do
     all_classes = schema[:all_classes]
     source = get_hierarchy_source(field)
-    {ok, path} = build_hierarchy(Schema.Utils.to_uid(class_key), source, all_classes)
+    {ok, path} = build_hierarchy(Utils.to_uid(class_key), source, all_classes)
 
     if ok do
       format_hierarchy(path, all_classes, "class")
@@ -355,7 +357,7 @@ defmodule SchemaWeb.PageView do
   def format_object_attribute_source(schema, object_key, field) do
     all_objects = schema[:all_objects]
     source = get_hierarchy_source(field)
-    {ok, path} = build_hierarchy(Schema.Utils.to_uid(object_key), source, all_objects)
+    {ok, path} = build_hierarchy(Utils.to_uid(object_key), source, all_objects)
 
     if ok do
       format_hierarchy(path, all_objects, "object")
@@ -390,7 +392,7 @@ defmodule SchemaWeb.PageView do
       true ->
         item = all_items[item_key]
         extends = item[:extends]
-        {parent_item_key, _parent_time} = Schema.Utils.find_parent(all_items, extends)
+        {parent_item_key, _parent_time} = Utils.find_parent(all_items, extends)
 
         build_hierarchy(
           parent_item_key,
@@ -892,7 +894,7 @@ defmodule SchemaWeb.PageView do
     ]
   end
 
-  @spec dictionary_links(any(), map(), String.t(), list(Schema.Utils.link_t())) :: <<>> | list()
+  @spec dictionary_links(any(), map(), String.t(), list(Utils.link_t())) :: <<>> | list()
   def dictionary_links(_, _, _, nil), do: ""
   def dictionary_links(_, _, _, []), do: ""
 
@@ -960,7 +962,7 @@ defmodule SchemaWeb.PageView do
   defp dictionary_links_class_to_html(conn, schema, attribute_name, linked_classes) do
     classes = schema[:classes]
     all_classes = schema[:all_classes]
-    attribute_key = Schema.Utils.descope_to_uid(attribute_name)
+    attribute_key = Utils.descope_to_uid(attribute_name)
 
     html_list =
       reverse_sort_links(linked_classes)
@@ -968,7 +970,7 @@ defmodule SchemaWeb.PageView do
         [],
         fn link, acc ->
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
-          class_key = Schema.Utils.to_uid(link[:type])
+          class_key = Utils.to_uid(link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
           source = attribute[:_source_patched] || attribute[:_source]
 
@@ -1079,14 +1081,14 @@ defmodule SchemaWeb.PageView do
   defp dictionary_links_class_updated_to_html(conn, schema, attribute_name, linked_classes) do
     classes = schema[:classes]
     all_classes = schema[:all_classes]
-    attribute_key = Schema.Utils.descope_to_uid(attribute_name)
+    attribute_key = Utils.descope_to_uid(attribute_name)
 
     {html_list, deprecated_count} =
       reverse_sort_links(linked_classes)
       |> Enum.reduce(
         {[], 0},
         fn link, {html_list, deprecated_count} ->
-          class_key = Schema.Utils.to_uid(link[:type])
+          class_key = Utils.to_uid(link[:type])
 
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
@@ -1270,7 +1272,7 @@ defmodule SchemaWeb.PageView do
   @spec object_links(
           any(),
           String.t(),
-          list(Schema.Utils.link_t()),
+          list(Utils.link_t()),
           nil | :collapse
         ) :: String.t() | list()
   def object_links(conn, name, links, list_presentation \\ nil)
@@ -1516,8 +1518,12 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec profile_links(any(), String.t(), list(Schema.Utils.link_t()), nil | :collapse) ::
-          <<>> | list()
+  @spec profile_links(
+          any(),
+          String.t(),
+          list(Utils.link_t()),
+          nil | :collapse
+        ) :: String.t() | list()
   def profile_links(conn, profile_name, links, list_presentation \\ nil)
   def profile_links(_, _, nil, _), do: ""
   def profile_links(_, _, [], _), do: ""
