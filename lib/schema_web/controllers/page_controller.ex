@@ -57,6 +57,7 @@ defmodule SchemaWeb.PageController do
     data = Schema.data_types() |> sort_attributes_by_key()
 
     render(conn, "data_types.html",
+      schema: Schema.schema(),
       extensions: Schema.extensions(),
       profiles: SchemaController.get_profiles(params),
       data: data
@@ -82,6 +83,7 @@ defmodule SchemaWeb.PageController do
 
       profile ->
         render(conn, "profile.html",
+          schema: Schema.schema(),
           extensions: Schema.extensions(),
           profiles: profiles,
           data: sort_attributes_by_key(profile)
@@ -142,6 +144,7 @@ defmodule SchemaWeb.PageController do
     data = SchemaController.dictionary(params) |> sort_attributes_by_key()
 
     render(conn, "dictionary.html",
+      schema: Schema.schema(),
       extensions: Schema.extensions(),
       profiles: SchemaController.get_profiles(params),
       data: data
@@ -173,6 +176,7 @@ defmodule SchemaWeb.PageController do
           |> sort_attributes_by_key()
 
         render(conn, "class.html",
+          schema: Schema.schema(),
           extensions: Schema.extensions(),
           profiles: SchemaController.get_profiles(params),
           data: data
@@ -205,6 +209,7 @@ defmodule SchemaWeb.PageController do
           |> sort_attributes_by_key()
 
         render(conn, "object.html",
+          schema: Schema.schema(),
           extensions: Schema.extensions(),
           profiles: SchemaController.get_profiles(params),
           data: data
@@ -216,6 +221,7 @@ defmodule SchemaWeb.PageController do
     data = SchemaController.objects(params) |> sort_by_descoped_key()
 
     render(conn, "objects.html",
+      schema: Schema.schema(),
       extensions: Schema.extensions(),
       profiles: SchemaController.get_profiles(params),
       data: data

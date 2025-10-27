@@ -42,6 +42,15 @@ defmodule Schema do
   end
 
   @doc """
+    Returns the entire schema. Useful for pages making a lot of iteretive calls that need
+    schema information.
+  """
+  @spec schema() :: map()
+  def schema() do
+    SingleRepo.schema()
+  end
+
+  @doc """
     Returns the schema extensions.
   """
   @spec extensions() :: map()
@@ -116,8 +125,8 @@ defmodule Schema do
   @doc """
     Returns the attribute dictionary including the extension.
   """
-  @spec dictionary(Utils.string_set_t()) :: Utils.dictionary_t()
-  def dictionary(extensions) do
+  @spec dictionary_filter_extensions(Utils.string_set_t()) :: Utils.dictionary_t()
+  def dictionary_filter_extensions(extensions) do
     SingleRepo.dictionary()
     |> Map.update!(:attributes, fn attributes ->
       Utils.filter_items_by_extensions(attributes, extensions)

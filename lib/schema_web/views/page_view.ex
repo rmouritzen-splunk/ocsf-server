@@ -1,5 +1,4 @@
 defmodule SchemaWeb.PageView do
-  alias SchemaWeb.SchemaController
   use SchemaWeb, :view
 
   @at_least_one_symbol "†"
@@ -196,9 +195,14 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec format_attribute_caption(any, String.t() | atom, nil | maybe_improper_list | map) :: any
-  def format_attribute_caption(conn, entity_key, entity) do
-    {observable_type_id, observable_kind} = observable_type_id_and_kind(entity)
+  @spec format_attribute_caption(
+          any,
+          map(),
+          String.t() | atom,
+          nil | maybe_improper_list | map
+        ) :: any
+  def format_attribute_caption(conn, schema, entity_key, entity) do
+    {observable_type_id, observable_kind} = observable_type_id_and_kind(schema, entity)
 
     caption = entity[:caption] || to_string(entity_key)
 
@@ -264,8 +268,9 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  defp observable_type_id_and_kind(entity) do
-    observable_object = Schema.object(:observable)
+  defp observable_type_id_and_kind(schema, entity) do
+    objects = schema[:objects]
+    observable_object = objects[:observable]
 
     observable_type_id_map =
       if observable_object do
@@ -289,7 +294,7 @@ defmodule SchemaWeb.PageView do
 
       Map.has_key?(entity, :type) ->
         # Check if this is a dictionary type
-        type = Schema.dictionary()[:types][:attributes][Schema.Utils.to_uid(entity[:type])]
+        type = schema[:dictionary][:types][:attributes][Schema.Utils.to_uid(entity[:type])]
         type_observable = type[:observable]
 
         cond do
@@ -305,7 +310,7 @@ defmodule SchemaWeb.PageView do
           Map.has_key?(entity, :object_type) ->
             # Check if this object is an observable
             object_key = Schema.Utils.to_uid(entity[:object_type])
-            object_observable = Schema.object(object_key)[:observable]
+            object_observable = objects[object_key][:observable]
 
             if object_observable do
               observable_type_id = Schema.Utils.observable_type_id_to_atom(object_observable)
@@ -333,9 +338,9 @@ defmodule SchemaWeb.PageView do
     Schema.Utils.descope(name)
   end
 
-  @spec format_class_attribute_source(atom(), map()) :: String.t()
-  def format_class_attribute_source(class_key, field) do
-    all_classes = Schema.all_classes()
+  @spec format_class_attribute_source(map(), atom(), map()) :: String.t()
+  def format_class_attribute_source(schema, class_key, field) do
+    all_classes = schema[:all_classes]
     source = get_hierarchy_source(field)
     {ok, path} = build_hierarchy(Schema.Utils.to_uid(class_key), source, all_classes)
 
@@ -346,9 +351,9 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec format_object_attribute_source(atom(), map()) :: String.t()
-  def format_object_attribute_source(object_key, field) do
-    all_objects = Schema.all_objects()
+  @spec format_object_attribute_source(map(), atom(), map()) :: String.t()
+  def format_object_attribute_source(schema, object_key, field) do
+    all_objects = schema[:all_objects]
     source = get_hierarchy_source(field)
     {ok, path} = build_hierarchy(Schema.Utils.to_uid(object_key), source, all_objects)
 
@@ -887,23 +892,23 @@ defmodule SchemaWeb.PageView do
     ]
   end
 
-  @spec dictionary_links(any(), String.t(), list(Schema.Utils.link_t())) :: <<>> | list()
-  def dictionary_links(_, _, nil), do: ""
-  def dictionary_links(_, _, []), do: ""
+  @spec dictionary_links(any(), map(), String.t(), list(Schema.Utils.link_t())) :: <<>> | list()
+  def dictionary_links(_, _, _, nil), do: ""
+  def dictionary_links(_, _, _, []), do: ""
 
-  def dictionary_links(conn, attribute_name, links) do
+  def dictionary_links(conn, schema, attribute_name, links) do
     groups = Enum.group_by(links, fn link -> link[:group] end)
 
     commons_html = dictionary_links_common_to_html(conn, groups["common"])
 
     classes_html =
       if Enum.empty?(commons_html) do
-        dictionary_links_class_to_html(conn, attribute_name, groups["class"])
+        dictionary_links_class_to_html(conn, schema, attribute_name, groups["class"])
       else
         Enum.intersperse(
           [
             "Referenced by all classes",
-            dictionary_links_class_updated_to_html(conn, attribute_name, groups["class"])
+            dictionary_links_class_updated_to_html(conn, schema, attribute_name, groups["class"])
           ],
           "<br>"
         )
@@ -950,13 +955,11 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  defp dictionary_links_class_to_html(_, _, nil), do: []
+  defp dictionary_links_class_to_html(_, _, _, nil), do: []
 
-  defp dictionary_links_class_to_html(conn, attribute_name, linked_classes) do
-    # Strip profiles parameter to get classes with proper source attribution
-    params_without_profiles = Map.delete(conn.params, "profiles")
-    classes = SchemaController.classes(params_without_profiles)
-    all_classes = Schema.all_classes()
+  defp dictionary_links_class_to_html(conn, schema, attribute_name, linked_classes) do
+    classes = schema[:classes]
+    all_classes = schema[:all_classes]
     attribute_key = Schema.Utils.descope_to_uid(attribute_name)
 
     html_list =
@@ -1071,13 +1074,11 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  defp dictionary_links_class_updated_to_html(_, _, nil), do: []
+  defp dictionary_links_class_updated_to_html(_, _, _, nil), do: []
 
-  defp dictionary_links_class_updated_to_html(conn, attribute_name, linked_classes) do
-    # Strip profiles parameter to get classes with proper source attribution
-    params_without_profiles = Map.delete(conn.params, "profiles")
-    classes = SchemaController.classes(params_without_profiles)
-    all_classes = Schema.all_classes()
+  defp dictionary_links_class_updated_to_html(conn, schema, attribute_name, linked_classes) do
+    classes = schema[:classes]
+    all_classes = schema[:all_classes]
     attribute_key = Schema.Utils.descope_to_uid(attribute_name)
 
     {html_list, deprecated_count} =
@@ -1266,8 +1267,12 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec object_links(any(), String.t(), list(Schema.Utils.link_t()), nil | :collapse) ::
-          <<>> | list()
+  @spec object_links(
+          any(),
+          String.t(),
+          list(Schema.Utils.link_t()),
+          nil | :collapse
+        ) :: String.t() | list()
   def object_links(conn, name, links, list_presentation \\ nil)
   def object_links(_, _, nil, _), do: ""
   def object_links(_, _, [], _), do: ""

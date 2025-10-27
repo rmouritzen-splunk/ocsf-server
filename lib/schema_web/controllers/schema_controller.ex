@@ -545,7 +545,7 @@ defmodule SchemaWeb.SchemaController do
   """
   @spec dictionary(map) :: map
   def dictionary(params) do
-    parse_options(extensions(params)) |> Schema.dictionary()
+    parse_options(extensions(params)) |> Schema.dictionary_filter_extensions()
   end
 
   @doc """
