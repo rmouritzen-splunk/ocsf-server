@@ -897,7 +897,7 @@ defmodule SchemaWeb.SchemaController do
   end
 
   def class_ex(id, params) do
-    Schema.class_filter_profiles(id, parse_options(profiles(params)))
+    Schema.class_with_referenced_objects_filter_profiles(id, parse_options(profiles(params)))
   end
 
   @doc """
@@ -944,7 +944,7 @@ defmodule SchemaWeb.SchemaController do
     profiles = parse_options(profiles(params))
     extensions = parse_options(extensions(params))
 
-    Schema.object_filter_extensions_profiles(id, extensions, profiles)
+    Schema.object_with_referenced_objects_filter_extensions_profiles(id, extensions, profiles)
   end
 
   # ---------------------------------------------

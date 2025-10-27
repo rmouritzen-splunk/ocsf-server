@@ -104,7 +104,8 @@ defmodule Schema.Utils do
   defp filter_links_by_extension(links, extensions) do
     Enum.filter(links, fn link ->
       # link item is NOT from an extension OR is member of extensions set
-      not Map.has_key?(link, :extension) or MapSet.member?(extensions, link[:extension])
+      extension = link[:extension]
+      extension == nil or MapSet.member?(extensions, link[:extension])
     end)
   end
 

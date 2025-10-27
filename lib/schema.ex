@@ -216,9 +216,7 @@ defmodule Schema do
         nil
 
       class ->
-        Map.update!(class, :attributes, fn attributes ->
-          Utils.filter_attributes_by_profiles(attributes, profiles)
-        end)
+        Utils.filter_item_attributes_by_profiles(class, profiles)
     end
   end
 
@@ -267,10 +265,91 @@ defmodule Schema do
         nil
 
       object ->
-        Map.update!(object, :attributes, fn attributes ->
-          Utils.filter_attributes_by_profiles(attributes, profiles)
-        end)
+        Utils.filter_item_attributes_by_profiles(object, profiles)
     end
+  end
+
+  # ---------------------------------------------- #
+  # Class and object with referenced objects       #
+  # as used by JSON Schema generation and graphs   #
+  # ---------------------------------------------- #
+
+  @doc """
+    Returns class with referenced objects, with attributes filtered by profiles.
+  """
+  @spec class_with_referenced_objects_filter_profiles(
+          String.t(),
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def class_with_referenced_objects_filter_profiles(id, profiles) do
+    schema = SingleRepo.schema()
+    objects = schema[:objects]
+
+    case schema[:classes][Utils.to_uid(id)] do
+      nil ->
+        nil
+
+      class ->
+        class
+        |> Map.put(:objects, referenced_objects(class, objects))
+        |> Utils.filter_item_attributes_by_profiles(profiles)
+    end
+  end
+
+  @doc """
+    Returns object with referenced objects, with attributes filtered by extensions and profiles.
+  """
+  @spec object_with_referenced_objects_filter_extensions_profiles(
+          String.t(),
+          Utils.string_set_t() | nil,
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def object_with_referenced_objects_filter_extensions_profiles(id, extensions, profiles) do
+    schema = SingleRepo.schema()
+    objects = schema[:objects]
+
+    case schema[:objects][Utils.to_uid(id)] do
+      nil ->
+        nil
+
+      object ->
+        object
+        |> Map.put(:objects, referenced_objects(object, objects))
+        |> Utils.filter_item_links_by_extensions(extensions)
+        |> Utils.filter_item_attributes_by_profiles(profiles)
+    end
+  end
+
+  @spec referenced_objects(map(), map()) :: list()
+  defp referenced_objects(item, schema_objects) do
+    # Referenced objects are returned as a list so JsonSchema.encode_objects can pattern
+    # match on an empty list (pattern matching on %{} matches _all_ maps)
+    Enum.to_list(gather_referenced_objects(item, schema_objects, %{}))
+  end
+
+  @spec gather_referenced_objects(map(), map(), map()) :: map()
+  defp gather_referenced_objects(item, schema_objects, referenced_objects) do
+    Enum.reduce(
+      item[:attributes],
+      referenced_objects,
+      fn {_attribute_name, attribute}, referenced_objects ->
+        case attribute[:object_type] do
+          nil ->
+            referenced_objects
+
+          object_type ->
+            object_name = String.to_atom(object_type)
+
+            if Map.has_key?(referenced_objects, object_name) do
+              referenced_objects
+            else
+              object = schema_objects[object_name]
+              referenced_objects = Map.put(referenced_objects, object_name, object)
+              gather_referenced_objects(object, schema_objects, referenced_objects)
+            end
+        end
+      end
+    )
   end
 
   # ------------------#

@@ -79,7 +79,7 @@ defmodule Schema.Graph do
 
           edge =
             %{
-              source: Atom.to_string(obj[:_source]),
+              source: obj[:_source],
               group: obj[:group],
               requirement: obj[:requirement] || "optional",
               from: make_id(class.name, class[:extension]),

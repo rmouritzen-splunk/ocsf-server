@@ -355,7 +355,7 @@ defmodule SchemaWeb.PageView do
     if ok do
       format_hierarchy(path, all_objects, "object")
     else
-      to_string(source)
+      source
     end
   end
 
@@ -474,7 +474,7 @@ defmodule SchemaWeb.PageView do
   @spec field_classes(map) :: nonempty_binary
   def field_classes(field) do
     css_classes =
-      if field[:_source] == :base_event or field[:_source] == :event do
+      if field[:_source] == "base_event" or field[:_source] == "event" do
         "base-event "
       else
         "event "
