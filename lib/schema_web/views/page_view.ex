@@ -370,7 +370,7 @@ defmodule SchemaWeb.PageView do
     # In the case of an attribute from a patched class or object, we want to display the final
     # compiled type, which is in :_source_patched and in this case :_source contains the name of
     # the pre-patched item.
-    field[:_source_patched] || field[:_source]
+    Utils.to_uid(field[:_source_patched] || field[:_source])
   end
 
   # Build a class or object hierarchy path from item_key to target_parent_item_key.
@@ -894,7 +894,7 @@ defmodule SchemaWeb.PageView do
     ]
   end
 
-  @spec dictionary_links(any(), map(), String.t(), list(Utils.link_t())) :: <<>> | list()
+  @spec dictionary_links(any(), map(), String.t(), list(Utils.link_t())) :: String.t() | list()
   def dictionary_links(_, _, _, nil), do: ""
   def dictionary_links(_, _, _, []), do: ""
 
@@ -972,7 +972,7 @@ defmodule SchemaWeb.PageView do
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
           class_key = Utils.to_uid(link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
-          source = attribute[:_source_patched] || attribute[:_source]
+          source = Utils.to_uid(attribute[:_source_patched] || attribute[:_source])
 
           cond do
             source == nil ->
@@ -1092,7 +1092,7 @@ defmodule SchemaWeb.PageView do
 
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
-          source = attribute[:_source_patched] || attribute[:_source]
+          source = Utils.to_uid(attribute[:_source_patched] || attribute[:_source])
 
           cond do
             source == nil ->
