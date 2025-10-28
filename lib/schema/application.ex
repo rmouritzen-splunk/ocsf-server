@@ -19,12 +19,12 @@ defmodule Schema.Application do
     env = Application.get_env(:schema_server, __MODULE__)
 
     schema_file = Keyword.get(env, :schema_file)
-    schemas_dir = Keyword.get(env, :schema_home)
+    schemas_home = Keyword.get(env, :schemas_home)
 
     # List all child processes to be supervised
     children = [
-      {Schemas, schemas_dir},
       {Schema.SingleRepo, schema_file},
+      {Schemas, schemas_home},
       Schema.Generator,
 
       # Start the endpoint when the application starts

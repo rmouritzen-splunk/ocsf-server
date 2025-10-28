@@ -32,7 +32,7 @@ config :phoenix_swagger, json_library: Jason
 
 # Configures the locations of the schema files
 config :schema_server, Schema.Application, schema_file: System.get_env("SCHEMA_FILE")
-config :schema_server, Schema.Application, schema_home: System.get_env("SCHEMA_HOME")
+config :schema_server, Schema.Application, schemas_home: System.get_env("SCHEMAS_HOME")
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
