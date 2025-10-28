@@ -292,11 +292,11 @@ defmodule Schema.JsonReader do
       Logger.debug("read ext file: [#{ext[:name]}] #{path}")
 
       ext_item = read_json_file(path)
+      ext_name = ext[:name]
+      ext_uid = ext[:uid]
 
-      Map.update!(base_item, :attributes, fn base_attributes ->
-        ext_type = ext[:name]
-        ext_uid = ext[:uid]
-
+      base_item
+      |> Map.update!(:attributes, fn base_attributes ->
         Map.merge(
           base_attributes,
           # Create ext attributes merged with base attributes.
@@ -320,27 +320,29 @@ defmodule Schema.JsonReader do
                 # ext_attribute does not have overwrite, so add to base but scope the
                 #  attribute name to avoid a potential collision with a base attribute
                 {
-                  Utils.to_uid(ext_type, ext_attribute_name),
-                  add_extension(ext_attribute, ext_type, ext_uid)
+                  Utils.to_uid(ext_name, ext_attribute_name),
+                  add_extension(ext_attribute, ext_name, ext_uid)
                 }
               end
             end
           )
         )
       end)
-      |> merge_ext_types(ext_item)
+      |> merge_ext_types(ext_item, ext_name, ext_uid)
     else
       base_item
     end
   end
 
-  defp merge_ext_types(base_item, ext) do
-    if base_item[:types] != nil and ext[:types] != nil do
-      update_in(base_item, [:types, :attributes], fn types ->
-        Utils.deep_merge(
-          types,
-          get_in(ext, [:types, :attributes])
-        )
+  defp merge_ext_types(base_item, ext_item, ext_name, ext_uid) do
+    if base_item[:types][:attributes] != nil and ext_item[:types][:attributes] != nil do
+      ext_types_attributes =
+        Enum.reduce(ext_item[:types][:attributes], %{}, fn {type_name, type}, types_attributes ->
+          Map.put(types_attributes, type_name, add_extension(type, ext_name, ext_uid))
+        end)
+
+      update_in(base_item, [:types, :attributes], fn base_types_attributes ->
+        Utils.deep_merge(base_types_attributes, ext_types_attributes)
       end)
     else
       base_item

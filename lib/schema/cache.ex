@@ -88,7 +88,8 @@ defmodule Schema.Cache do
       objects
       |> Utils.update_objects(dictionary_attributes)
       |> update_observable(observable_type_id_map)
-      |> update_objects()
+      # TODO: Bug fix: |> update_objects()
+      |> consolidate_object_profiles(dictionary)
       |> final_check(dictionary_attributes)
 
     # Check profiles used in classes, adding classes to profile's _links
@@ -96,7 +97,8 @@ defmodule Schema.Cache do
 
     classes =
       classes
-      |> update_classes(objects)
+      # TODO: Bug fix: |> update_classes(objects)
+      |> consolidate_class_profiles(objects, dictionary)
       |> final_check(dictionary_attributes)
 
     no_req_set = MapSet.new()
@@ -1240,57 +1242,57 @@ defmodule Schema.Cache do
     |> Map.put(:attributes, Enum.into(list, attributes))
   end
 
-  defp update_objects(objects) do
-    Enum.reduce(objects, objects, fn {_name, object}, acc ->
-      if Map.has_key?(object, :profiles) do
-        update_object_profiles(object, acc)
-      else
-        acc
-      end
-    end)
-  end
+  # defp update_objects(objects) do
+  #   Enum.reduce(objects, objects, fn {_name, object}, acc ->
+  #     if Map.has_key?(object, :profiles) do
+  #       update_object_profiles(object, acc)
+  #     else
+  #       acc
+  #     end
+  #   end)
+  # end
 
-  defp update_object_profiles(object, objects) do
-    case object[:_links] do
-      nil ->
-        objects
+  # defp update_object_profiles(object, objects) do
+  #   case object[:_links] do
+  #     nil ->
+  #       objects
 
-      links ->
-        update_linked_profiles(:object, links, object, objects)
-    end
-  end
+  #     links ->
+  #       update_linked_profiles(:object, links, object, objects)
+  #   end
+  # end
 
-  defp update_classes(classes, objects) do
-    Enum.reduce(objects, classes, fn {name, object}, acc ->
-      if Map.has_key?(object, :profiles) do
-        update_class_profiles(name, object, acc)
-      else
-        acc
-      end
-    end)
-  end
+  # defp update_classes(classes, objects) do
+  #   Enum.reduce(objects, classes, fn {name, object}, acc ->
+  #     if Map.has_key?(object, :profiles) do
+  #       update_class_profiles(name, object, acc)
+  #     else
+  #       acc
+  #     end
+  #   end)
+  # end
 
-  defp update_class_profiles(_name, object, classes) do
-    case object[:_links] do
-      nil ->
-        classes
+  # defp update_class_profiles(_name, object, classes) do
+  #   case object[:_links] do
+  #     nil ->
+  #       classes
 
-      links ->
-        update_linked_profiles(:class, links, object, classes)
-    end
-  end
+  #     links ->
+  #       update_linked_profiles(:class, links, object, classes)
+  #   end
+  # end
 
-  defp update_linked_profiles(group, links, object, classes) do
-    Enum.reduce(links, classes, fn link, acc ->
-      if link[:group] == group do
-        Map.update!(acc, String.to_atom(link[:type]), fn class ->
-          Map.put(class, :profiles, merge_profiles(class[:profiles], object[:profiles]))
-        end)
-      else
-        acc
-      end
-    end)
-  end
+  # defp update_linked_profiles(group, links, object, classes) do
+  #   Enum.reduce(links, classes, fn link, acc ->
+  #     if link[:group] == group do
+  #       Map.update!(acc, String.to_atom(link[:type]), fn class ->
+  #         Map.put(class, :profiles, merge_profiles(class[:profiles], object[:profiles]))
+  #       end)
+  #     else
+  #       acc
+  #     end
+  #   end)
+  # end
 
   defp merge_profiles(nil, p2) do
     p2
@@ -1302,6 +1304,129 @@ defmodule Schema.Cache do
 
   defp merge_profiles(p1, p2) do
     Enum.concat(p1, p2) |> Enum.uniq() |> Enum.sort()
+  end
+
+  @spec consolidate_object_profiles(map(), map()) :: map()
+  defp consolidate_object_profiles(objects, dictionary) do
+    consolidate_profiles(:object, objects, objects, dictionary)
+  end
+
+  @spec consolidate_class_profiles(map(), map(), map()) :: map()
+  defp consolidate_class_profiles(classes, objects, dictionary) do
+    consolidate_profiles(:class, classes, objects, dictionary)
+  end
+
+  @spec consolidate_profiles(:class | :object, map(), map(), map()) :: map()
+  defp consolidate_profiles(kind, kind_items, objects, dictionary) do
+    Enum.reduce(
+      kind_items,
+      %{},
+      fn {item_name, item}, kind_items ->
+        gathered_profiles =
+          case kind do
+            :class ->
+              gathered_profiles =
+                case item[:profiles] do
+                  nil ->
+                    %{}
+
+                  profiles ->
+                    %{"class:#{item_name}": profiles}
+                end
+
+              Enum.reduce(
+                item[:attributes],
+                gathered_profiles,
+                fn {attribute_name, attribute}, gathered_profiles ->
+                  case find_object_type(attribute_name, attribute, dictionary) do
+                    nil ->
+                      gathered_profiles
+
+                    object_type ->
+                      gather_profiles(object_type, objects, dictionary, gathered_profiles)
+                  end
+                end
+              )
+
+            :object ->
+              gather_profiles(item_name, objects, dictionary, %{})
+          end
+
+        all_profiles =
+          Enum.reduce(Map.values(gathered_profiles), MapSet.new([]), fn profiles, all_profiles ->
+            case profiles do
+              nil ->
+                all_profiles
+
+              profiles ->
+                Enum.reduce(profiles, all_profiles, fn profile, all_profiles ->
+                  MapSet.put(all_profiles, profile)
+                end)
+            end
+          end)
+
+        item =
+          if Enum.empty?(all_profiles) do
+            item
+          else
+            Map.put(item, :profiles, Enum.sort(all_profiles))
+          end
+
+        Map.put(kind_items, item_name, item)
+      end
+    )
+  end
+
+  @type gathered_profiles_t() :: %{(atom() | String.t()) => nil | list(String.t())}
+
+  @spec gather_profiles(
+          atom(),
+          map(),
+          map(),
+          gathered_profiles_t()
+        ) :: gathered_profiles_t()
+  defp gather_profiles(object_name, objects, dictionary, gathered_profiles) do
+    if Map.has_key?(gathered_profiles, object_name) do
+      gathered_profiles
+    else
+      object = objects[object_name]
+
+      if object == nil do
+        raise("Object #{inspect(object_name)} is not defined")
+      end
+
+      # We specifically want actual and nil values since gathered_profiles is doing both
+      # gathering profiles and marking things that have been processed.
+      gathered_profiles = Map.put(gathered_profiles, object_name, object[:profiles])
+
+      Enum.reduce(
+        object[:attributes],
+        gathered_profiles,
+        fn {attribute_name, attribute}, gathered_profiles ->
+          case find_object_type(attribute_name, attribute, dictionary) do
+            nil ->
+              gathered_profiles
+
+            object_type ->
+              gather_profiles(object_type, objects, dictionary, gathered_profiles)
+          end
+        end
+      )
+    end
+  end
+
+  @spec find_object_type(atom(), map(), map()) :: nil | atom()
+  defp find_object_type(attribute_name, attribute, dictionary) do
+    dictionary_attribute =
+      find_attribute(dictionary[:attributes], attribute_name, attribute[:_source])
+
+    case dictionary_attribute[:object_type] do
+      nil ->
+        nil
+
+      object_type ->
+        String.to_atom(object_type)
+    end
   end
 
   defp update_dictionary(dictionary) do
