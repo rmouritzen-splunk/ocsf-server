@@ -340,11 +340,11 @@ defmodule SchemaWeb.PageView do
     Utils.descope(name)
   end
 
-  @spec format_class_attribute_source(map(), atom(), map()) :: String.t()
-  def format_class_attribute_source(schema, class_key, field) do
+  @spec format_class_attribute_source(map(), atom() | String.t(), map()) :: list() | String.t()
+  def format_class_attribute_source(schema, class_name, field) do
     all_classes = schema[:all_classes]
-    source = get_hierarchy_source(field)
-    {ok, path} = build_hierarchy(Utils.to_uid(class_key), source, all_classes)
+    source = Utils.to_uid(field[:_source])
+    {ok, path} = build_hierarchy(Utils.to_uid(class_name), source, all_classes)
 
     if ok do
       format_hierarchy(path, all_classes, "class")
@@ -353,24 +353,17 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec format_object_attribute_source(map(), atom(), map()) :: String.t()
-  def format_object_attribute_source(schema, object_key, field) do
+  @spec format_object_attribute_source(map(), atom() | String.t(), map()) :: list() | String.t()
+  def format_object_attribute_source(schema, object_name, field) do
     all_objects = schema[:all_objects]
-    source = get_hierarchy_source(field)
-    {ok, path} = build_hierarchy(Utils.to_uid(object_key), source, all_objects)
+    source = Utils.to_uid(field[:_source])
+    {ok, path} = build_hierarchy(Utils.to_uid(object_name), source, all_objects)
 
     if ok do
       format_hierarchy(path, all_objects, "object")
     else
       source
     end
-  end
-
-  defp get_hierarchy_source(field) do
-    # In the case of an attribute from a patched class or object, we want to display the final
-    # compiled type, which is in :_source_patched and in this case :_source contains the name of
-    # the pre-patched item.
-    Utils.to_uid(field[:_source_patched] || field[:_source])
   end
 
   # Build a class or object hierarchy path from item_key to target_parent_item_key.
@@ -403,6 +396,7 @@ defmodule SchemaWeb.PageView do
     end
   end
 
+  @spec format_hierarchy(list(), map(), String.t()) :: list() | String.t()
   defp format_hierarchy(path, all_items, kind) do
     Enum.map(
       path,
@@ -972,7 +966,7 @@ defmodule SchemaWeb.PageView do
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
           class_key = Utils.to_uid(link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
-          source = Utils.to_uid(attribute[:_source_patched] || attribute[:_source])
+          source = Utils.to_uid(attribute[:_source])
 
           cond do
             source == nil ->
@@ -1092,7 +1086,7 @@ defmodule SchemaWeb.PageView do
 
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
-          source = Utils.to_uid(attribute[:_source_patched] || attribute[:_source])
+          source = Utils.to_uid(attribute[:_source])
 
           cond do
             source == nil ->
