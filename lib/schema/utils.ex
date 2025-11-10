@@ -11,6 +11,7 @@ defmodule Schema.Utils do
   @moduledoc """
   Defines map helper functions.
   """
+
   @type class_t() :: map()
   @type object_t() :: map()
   @type category_t() :: map()
@@ -198,15 +199,20 @@ defmodule Schema.Utils do
 
   defp filter_attributes_by_profiles_sized(attributes, profiles, _size) do
     Enum.filter(attributes, fn {_k, v} ->
-      case v[:profile] do
-        nil -> true
-        profile -> MapSet.member?(profiles, profile)
+      case v[:profiles] do
+        nil ->
+          true
+
+        attribute_profiles ->
+          Enum.any?(attribute_profiles, fn attribute_profile ->
+            MapSet.member?(profiles, attribute_profile)
+          end)
       end
     end)
   end
 
   def remove_profiles(attributes) do
-    Enum.filter(attributes, fn {_k, v} -> Map.has_key?(v, :profile) == false end)
+    Enum.filter(attributes, fn {_k, v} -> Map.has_key?(v, :profiles) == false end)
   end
 
   @version_regex ~r/^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>.+))?$/

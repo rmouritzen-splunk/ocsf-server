@@ -214,7 +214,7 @@ defmodule Schema.Validator2 do
               fn profile, {response, index} ->
                 response =
                   if is_binary(profile) and not MapSet.member?(schema_profiles, profile) do
-                    attribute_path = make_attribute_path_array_element("metadata.profile", index)
+                    attribute_path = make_attribute_path_array_element("metadata.profiles", index)
 
                     add_error(
                       response,
@@ -262,9 +262,14 @@ defmodule Schema.Validator2 do
     profile_set = MapSet.new(profiles)
 
     Enum.filter(attributes, fn {_k, v} ->
-      case v[:profile] do
-        nil -> true
-        profile -> MapSet.member?(profile_set, profile)
+      case v[:profiles] do
+        nil ->
+          true
+
+        attribute_profiles ->
+          Enum.any?(attribute_profiles, fn attribute_profile ->
+            MapSet.member?(profile_set, attribute_profile)
+          end)
       end
     end)
   end

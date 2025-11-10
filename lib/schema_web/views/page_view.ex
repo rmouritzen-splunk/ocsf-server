@@ -201,9 +201,10 @@ defmodule SchemaWeb.PageView do
           any,
           map(),
           String.t() | atom,
-          nil | maybe_improper_list | map
+          nil | maybe_improper_list | map,
+          boolean()
         ) :: any
-  def format_attribute_caption(conn, schema, entity_key, entity) do
+  def format_attribute_caption(conn, schema, entity_key, entity, is_attribute \\ true) do
     {observable_type_id, observable_kind} = observable_type_id_and_kind(schema, entity)
 
     caption = entity[:caption] || to_string(entity_key)
@@ -249,18 +250,29 @@ defmodule SchemaWeb.PageView do
       end
 
     source_indicators =
-      case entity[:profile] do
-        nil ->
-          source_indicators
+      if is_attribute do
+        case entity[:profiles] do
+          nil ->
+            source_indicators
 
-        profile when profile != "" ->
-          [
-            "<sup class='source-indicator profile-indicator' data-toggle='tooltip' title='From #{profile} profile'><i class='fas fa-tag'></i></sup>"
-            | source_indicators
-          ]
+          profiles when is_list(profiles) ->
+            profiles_text =
+              if Enum.count(profiles) == 1 do
+                "From #{Enum.at(profiles, 0)} profile"
+              else
+                "From profiles: #{Enum.intersperse(profiles, ", ")}"
+              end
 
-        _ ->
-          source_indicators
+            [
+              "<sup class='source-indicator profile-indicator' data-toggle='tooltip' title='#{profiles_text}'><i class='fas fa-tag'></i></sup>"
+              | source_indicators
+            ]
+
+          _ ->
+            source_indicators
+        end
+      else
+        source_indicators
       end
 
     if Enum.empty?(source_indicators) do
@@ -501,11 +513,13 @@ defmodule SchemaWeb.PageView do
         css_classes <> "no-group"
       end
 
-    profile = field[:profile]
+    profiles = field[:profiles]
 
     css_classes =
-      if profile != nil do
-        css_classes <> " " <> String.replace(profile, "/", "-")
+      if profiles != nil do
+        Enum.reduce(profiles, css_classes, fn profile, css_classes ->
+          css_classes <> " " <> String.replace(profile, "/", "-")
+        end)
       else
         css_classes <> " no-profile"
       end
