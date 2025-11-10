@@ -1,4 +1,4 @@
-ARG elixir_image=elixir:1.18.3-alpine
+ARG elixir_image=elixir:1.19.1-alpine
 
 FROM ${elixir_image} AS builder
 
@@ -72,7 +72,7 @@ RUN chown nobody /app
 # set runner ENV
 ENV MIX_ENV="prod"
 ENV PORT=8080
-ENV SCHEMA_DIR="/app/schema"
+ENV SCHEMAS_HOME="/app/schemas"
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/schema_server ./

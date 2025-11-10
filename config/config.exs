@@ -1,7 +1,6 @@
 import Config
 
 port = System.get_env("HTTP_PORT") || System.get_env("PORT") || 8080
-path = System.get_env("SCHEMA_PATH") || "/"
 
 # Configures the endpoint
 config :schema_server, SchemaWeb.Endpoint,
