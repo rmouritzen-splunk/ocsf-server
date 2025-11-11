@@ -454,8 +454,6 @@ defmodule Schema.JsonReader do
         attribute
 
       file ->
-        # TODO: Bug fix. Avoid creating extraneous mapping of :attributes to []
-        #       inside of an attribute detail.
         read_included_enum_file(resolver, file)
         |> Utils.deep_merge(Map.delete(attribute, @include))
     end

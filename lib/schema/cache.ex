@@ -88,7 +88,6 @@ defmodule Schema.Cache do
       objects
       |> Utils.update_objects(dictionary_attributes)
       |> update_observable(observable_type_id_map)
-      # TODO: Bug fix: |> update_objects()
       |> consolidate_object_profiles(dictionary)
       |> final_check(dictionary_attributes)
 
@@ -97,7 +96,6 @@ defmodule Schema.Cache do
 
     classes =
       classes
-      # TODO: Bug fix: |> update_classes(objects)
       |> consolidate_class_profiles(objects, dictionary)
       |> final_check(dictionary_attributes)
 
@@ -121,7 +119,6 @@ defmodule Schema.Cache do
       profiles: profiles,
       categories: categories,
       dictionary: dictionary,
-      # TODO: Bug fix for base_event. We want fully processed base_event.
       base_event: classes[:base_event],
       classes: classes,
       all_classes: all_classes,
@@ -1241,58 +1238,6 @@ defmodule Schema.Cache do
     |> Map.put(:profiles, merge_profiles(profiles, ["datetime"]))
     |> Map.put(:attributes, Enum.into(list, attributes))
   end
-
-  # defp update_objects(objects) do
-  #   Enum.reduce(objects, objects, fn {_name, object}, acc ->
-  #     if Map.has_key?(object, :profiles) do
-  #       update_object_profiles(object, acc)
-  #     else
-  #       acc
-  #     end
-  #   end)
-  # end
-
-  # defp update_object_profiles(object, objects) do
-  #   case object[:_links] do
-  #     nil ->
-  #       objects
-
-  #     links ->
-  #       update_linked_profiles(:object, links, object, objects)
-  #   end
-  # end
-
-  # defp update_classes(classes, objects) do
-  #   Enum.reduce(objects, classes, fn {name, object}, acc ->
-  #     if Map.has_key?(object, :profiles) do
-  #       update_class_profiles(name, object, acc)
-  #     else
-  #       acc
-  #     end
-  #   end)
-  # end
-
-  # defp update_class_profiles(_name, object, classes) do
-  #   case object[:_links] do
-  #     nil ->
-  #       classes
-
-  #     links ->
-  #       update_linked_profiles(:class, links, object, classes)
-  #   end
-  # end
-
-  # defp update_linked_profiles(group, links, object, classes) do
-  #   Enum.reduce(links, classes, fn link, acc ->
-  #     if link[:group] == group do
-  #       Map.update!(acc, String.to_atom(link[:type]), fn class ->
-  #         Map.put(class, :profiles, merge_profiles(class[:profiles], object[:profiles]))
-  #       end)
-  #     else
-  #       acc
-  #     end
-  #   end)
-  # end
 
   defp merge_profiles(nil, p2) do
     p2
