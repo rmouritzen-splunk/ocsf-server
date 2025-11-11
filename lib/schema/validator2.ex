@@ -17,6 +17,8 @@ defmodule Schema.Validator2 do
   # functions) take a response and return one, possibly updated.
   # The overall flow is to examine the event or list of events, and return a validation response.
 
+  # TODO: Optimize by getting clean_schema once
+
   require Logger
 
   @spec validate(map(), boolean()) :: map()
@@ -205,7 +207,7 @@ defmodule Schema.Validator2 do
       cond do
         is_list(profiles) ->
           # Ensure each profile is actually defined
-          schema_profiles = MapSet.new(Map.keys(Schema.profiles()))
+          schema_profiles = MapSet.new(Map.keys(Schema.clean_profiles()))
 
           {response, _} =
             Enum.reduce(

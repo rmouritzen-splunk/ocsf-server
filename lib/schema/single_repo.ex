@@ -131,18 +131,20 @@ defmodule Schema.SingleRepo do
   defp clean_schema(schema) do
     # The following are not enriched with schema browser UI information,
     # so do not need to be cleaned:
-    #   schema[:version] (this is just a string)
     #   schema[:categories]
     #   schema[:extensions]
-    #   schema[:dictionary][:types]
+    #   schema[:dictionary][:types]  (only [:dictionary][:attributes] need cleaning)
+    #   schema[:version]             (this is just a string)
+    #   schema[:compile_version]     (this is also just a string)
     %{
-      version: schema[:version],
       categories: schema[:categories],
       dictionary: schema[:dictionary] |> Utils.clean_item(),
       classes: Utils.clean_items(schema[:classes]),
       objects: Utils.clean_items(schema[:objects]),
       profiles: Utils.clean_items(schema[:profiles]),
-      extensions: schema[:extensions]
+      extensions: schema[:extensions],
+      version: schema[:version],
+      compile_version: schema[:compile_version]
     }
   end
 

@@ -87,31 +87,25 @@ defmodule SchemaWeb.Router do
     pipe_through :api
 
     get "/classes/:id", SchemaController, :json_class
-    get "/classes/:extension/:id", SchemaController, :json_class
-
     get "/objects/:id", SchemaController, :json_object
-    get "/objects/:extension/:id", SchemaController, :json_object
   end
 
   scope "/export", SchemaWeb do
     pipe_through :api
 
-    get "/base_event", SchemaController, :export_base_event
-    get "/classes", SchemaController, :export_classes
-    get "/objects", SchemaController, :export_objects
-    get "/schema", SchemaController, :export_schema
+    get "/base_event", SchemaController, :legacy_export_base_event
+    get "/classes", SchemaController, :legacy_export_classes
+    get "/objects", SchemaController, :legacy_export_objects
+    get "/schema", SchemaController, :legacy_export_schema
+    get "/v2/schema", SchemaController, :export_schema
   end
 
   scope "/sample", SchemaWeb do
     pipe_through :api
 
     get "/base_event", SchemaController, :sample_event
-
     get "/objects/:id", SchemaController, :sample_object
-    get "/objects/:extension/:id", SchemaController, :sample_object
-
     get "/classes/:id", SchemaController, :sample_class
-    get "/classes/:extension/:id", SchemaController, :sample_class
   end
 
   scope "/doc" do
