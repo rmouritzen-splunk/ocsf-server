@@ -760,7 +760,7 @@ defmodule SchemaWeb.SchemaController do
     end
 
     response(200, "Success")
-    response(400, "Failure because schema cannot be expressed in the legacy format.")
+    response(400, "Failure if schema cannot be expressed in the legacy format")
   end
 
   @spec legacy_export_schema(Plug.Conn.t(), any) :: Plug.Conn.t()
@@ -793,7 +793,7 @@ defmodule SchemaWeb.SchemaController do
     end
 
     response(200, "Success")
-    response(400, "Failure because schema cannot be expressed in the legacy format.")
+    response(400, "Failure if schema cannot be expressed in the legacy format")
   end
 
   def legacy_export_classes(conn, params) do
@@ -824,7 +824,7 @@ defmodule SchemaWeb.SchemaController do
     end
 
     response(200, "Success")
-    response(400, "Failure because schema cannot be expressed in the legacy format.")
+    response(400, "Failure if schema cannot be expressed in the legacy format")
   end
 
   def legacy_export_base_event(conn, params) do
@@ -855,7 +855,7 @@ defmodule SchemaWeb.SchemaController do
     end
 
     response(200, "Success")
-    response(400, "Failure because schema cannot be expressed in the legacy format.")
+    response(400, "Failure if schema cannot be expressed in the legacy format")
   end
 
   def legacy_export_objects(conn, params) do
@@ -1001,7 +1001,7 @@ defmodule SchemaWeb.SchemaController do
   """
   swagger_path :enrich do
     post("/api/enrich")
-    summary("Enrich Event")
+    summary("Enrich event")
 
     description(
       "The purpose of this API is to enrich the provided event data with" <>
@@ -1073,7 +1073,7 @@ defmodule SchemaWeb.SchemaController do
   """
   swagger_path :translate do
     post("/api/translate")
-    summary("Translate Event")
+    summary("Translate event")
 
     description(
       "The purpose of this API is to translate the provided event data using the OCSF schema." <>
@@ -1157,7 +1157,7 @@ defmodule SchemaWeb.SchemaController do
   """
   swagger_path :validate do
     post("/api/validate")
-    summary("Validate Event")
+    summary("Validate event")
 
     description(
       "The primary objective of this API is to validate the provided event data against the" <>
