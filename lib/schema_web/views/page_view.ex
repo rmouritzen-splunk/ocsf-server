@@ -513,16 +513,27 @@ defmodule SchemaWeb.PageView do
         css_classes <> "no-group"
       end
 
-    profiles = field[:profiles]
-
-    css_classes =
-      if profiles != nil do
-        Enum.reduce(profiles, css_classes, fn profile, css_classes ->
-          css_classes <> " " <> String.replace(profile, "/", "-")
-        end)
-      else
-        css_classes <> " no-profile"
-      end
+    # This is broken now that attributes can have more than one profile because app.js assumes
+    # a row will have either a CSS class based on a single profile OR no-profile. The visibility
+    # is based on the number of CSS classes (app.js line 170).
+    # HOWEVER we no longer use JavaScript to enable the display of extensions and profiles and
+    # instead reload the page using Elixir code to filter extensions and profiles.
+    # Evidently the prior JavaScript approach was never cleaned up after this change.
+    #
+    # profiles = field[:profiles]
+    # css_classes =
+    #   if profiles != nil do
+    #     # THIS IS THE (IRRELEVANT) PART THAT'S BROKEN.
+    #     # This used to be a single profile but now it's a list.
+    #     Enum.reduce(profiles, css_classes, fn profile, css_classes ->
+    #       css_classes <> " " <> String.replace(profile, "/", "-")
+    #     end)
+    #   else
+    #     css_classes <> " no-profile"
+    #   end
+    #
+    # Until we have time to untangle this mess, we can simply use the no-profile CSS class.
+    css_classes = css_classes <> " no-profile"
 
     show_deprecated_css_classes(field, css_classes)
   end
