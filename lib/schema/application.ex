@@ -29,7 +29,6 @@ defmodule Schema.Application do
 
       # Start the endpoint when the application starts
       SchemaWeb.Endpoint,
-      # TODO: is PubSub needed?
       {Phoenix.PubSub, [name: Schema.PubSub, adapter: Phoenix.PubSub.PG2]}
     ]
 

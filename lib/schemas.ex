@@ -15,7 +15,7 @@ defmodule Schemas do
   # TODO: Convert to support compiled schema files.
   #       Initial beta release of 4.x will be run alongside existing servers
   #       probably with its own URL somehow, perhaps simply be adding a suffix,
-  #       for example "1.7.0-dev+v4-beta-server".
+  #       for example "1.7.0-dev-beta-server".
 
   use Agent
 

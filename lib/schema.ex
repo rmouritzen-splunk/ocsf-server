@@ -51,6 +51,15 @@ defmodule Schema do
   end
 
   @doc """
+    Returns the entire clean schema, without browser information. Useful for API handlers that
+    make many iterative calls that needs schema information.
+  """
+  @spec schema() :: map()
+  def clean_schema() do
+    SingleRepo.clean_schema()
+  end
+
+  @doc """
     Get the data types themselves (without the top level types caption, description, etc.).
   """
   @spec data_types_attributes() :: any
@@ -168,27 +177,29 @@ defmodule Schema do
   @doc """
     Returns the data types defined in dictionary. Used for data types page.
   """
-  @spec data_types :: map()
+  @spec data_types() :: map()
   def data_types() do
     SingleRepo.dictionary()[:types]
   end
 
-  # TODO: Optimize uses of this function to pass in data types
-  #       Used in json_schema.ex and validator.ex
-  @spec data_type?(String.t(), String.t() | list(String.t())) :: boolean()
-  def data_type?(type, type) do
+  @doc """
+    Parameter 1 must be the actual data types as from Schema.data_types_attributes/0.
+    Returns true if parameter 2 (type) is valid against parameter 3 (base type)
+  """
+  @spec data_type?(map(), String.t(), String.t() | list(String.t())) :: boolean()
+  def data_type?(_data_types, type, type) do
     true
   end
 
-  def data_type?(type, base_type) when is_binary(base_type) do
-    case Map.get(data_types_attributes(), String.to_atom(type)) do
+  def data_type?(data_types, type, base_type) when is_binary(base_type) do
+    case Map.get(data_types, String.to_atom(type)) do
       nil -> false
       data -> data[:type] == base_type
     end
   end
 
-  def data_type?(type, base_types) do
-    case Map.get(data_types_attributes(), String.to_atom(type)) do
+  def data_type?(data_types, type, base_types) do
+    case Map.get(data_types, String.to_atom(type)) do
       nil ->
         false
 
