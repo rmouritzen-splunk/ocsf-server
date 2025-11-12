@@ -198,16 +198,8 @@ defmodule Schema.Utils do
   end
 
   defp filter_attributes_by_profiles_sized(attributes, profiles, _size) do
-    Enum.filter(attributes, fn {_k, v} ->
-      case v[:profiles] do
-        nil ->
-          true
-
-        attribute_profiles ->
-          Enum.any?(attribute_profiles, fn attribute_profile ->
-            MapSet.member?(profiles, attribute_profile)
-          end)
-      end
+    Enum.filter(attributes, fn {_k, a} ->
+      a[:profiles] == nil || Enum.any?(a[:profiles], fn ap -> MapSet.member?(profiles, ap) end)
     end)
   end
 

@@ -26,7 +26,7 @@ defmodule SchemaWeb.PageController do
 
         render(conn, "class_graph.html",
           extensions: Schema.extensions(),
-          profiles: SchemaController.get_profiles(params),
+          profiles: get_profiles(params),
           data: data
         )
     end
@@ -43,7 +43,7 @@ defmodule SchemaWeb.PageController do
 
         render(conn, "object_graph.html",
           extensions: Schema.extensions(),
-          profiles: SchemaController.get_profiles(params),
+          profiles: get_profiles(params),
           data: data
         )
     end
@@ -59,7 +59,7 @@ defmodule SchemaWeb.PageController do
     render(conn, "data_types.html",
       schema: Schema.schema(),
       extensions: Schema.extensions(),
-      profiles: SchemaController.get_profiles(params),
+      profiles: get_profiles(params),
       data: data
     )
   end
@@ -75,7 +75,7 @@ defmodule SchemaWeb.PageController do
         extension -> "#{extension}/#{id}"
       end
 
-    profiles = SchemaController.get_profiles(params)
+    profiles = get_profiles(params)
 
     case profiles[name] do
       nil ->
@@ -92,7 +92,7 @@ defmodule SchemaWeb.PageController do
   end
 
   def profiles(conn, params) do
-    profiles = SchemaController.get_profiles(params)
+    profiles = get_profiles(params)
     sorted_profiles = sort_by_descoped_key(profiles)
 
     render(conn, "profiles.html",
@@ -116,7 +116,7 @@ defmodule SchemaWeb.PageController do
 
         render(conn, "category.html",
           extensions: Schema.extensions(),
-          profiles: SchemaController.get_profiles(params),
+          profiles: get_profiles(params),
           data: Map.put(data, :classes, classes)
         )
     end
@@ -131,7 +131,7 @@ defmodule SchemaWeb.PageController do
 
     render(conn, "index.html",
       extensions: Schema.extensions(),
-      profiles: SchemaController.get_profiles(params),
+      profiles: get_profiles(params),
       data: data
     )
   end
@@ -141,12 +141,15 @@ defmodule SchemaWeb.PageController do
   """
   @spec dictionary(Plug.Conn.t(), any) :: Plug.Conn.t()
   def dictionary(conn, params) do
-    data = SchemaController.dictionary(params) |> sort_attributes_by_key()
+    data =
+      SchemaController.parse_options(SchemaController.extensions(params))
+      |> Schema.dictionary_filter_extensions()
+      |> sort_attributes_by_key()
 
     render(conn, "dictionary.html",
       schema: Schema.schema(),
       extensions: Schema.extensions(),
-      profiles: SchemaController.get_profiles(params),
+      profiles: get_profiles(params),
       data: data
     )
   end
@@ -171,15 +174,11 @@ defmodule SchemaWeb.PageController do
         send_resp(conn, 404, "Not Found: #{id}")
 
       data ->
-        data =
-          data
-          |> sort_attributes_by_key()
-
         render(conn, "class.html",
           schema: Schema.schema(),
           extensions: Schema.extensions(),
-          profiles: SchemaController.get_profiles(params),
-          data: data
+          profiles: get_profiles(params),
+          data: sort_attributes_by_key(data)
         )
     end
   end
@@ -189,7 +188,7 @@ defmodule SchemaWeb.PageController do
 
     render(conn, "classes.html",
       extensions: Schema.extensions(),
-      profiles: SchemaController.get_profiles(params),
+      profiles: get_profiles(params),
       data: data
     )
   end
@@ -199,31 +198,33 @@ defmodule SchemaWeb.PageController do
   """
   @spec objects(Plug.Conn.t(), map) :: Plug.Conn.t()
   def objects(conn, %{"id" => id} = params) do
-    case SchemaController.object(params) do
+    profiles = SchemaController.parse_options(SchemaController.profiles(params))
+    extensions = SchemaController.parse_options(SchemaController.extensions(params))
+
+    case Schema.object_filter_extensions_profiles(id, extensions, profiles) do
       nil ->
         send_resp(conn, 404, "Not Found: #{id}")
 
       data ->
-        data =
-          data
-          |> sort_attributes_by_key()
-
         render(conn, "object.html",
           schema: Schema.schema(),
           extensions: Schema.extensions(),
-          profiles: SchemaController.get_profiles(params),
-          data: data
+          profiles: get_profiles(params),
+          data: sort_attributes_by_key(data)
         )
     end
   end
 
   def objects(conn, params) do
-    data = SchemaController.objects(params) |> sort_by_descoped_key()
+    data =
+      SchemaController.parse_options(SchemaController.extensions(params))
+      |> Schema.objects_filter_extensions()
+      |> sort_by_key()
 
     render(conn, "objects.html",
       schema: Schema.schema(),
       extensions: Schema.extensions(),
-      profiles: SchemaController.get_profiles(params),
+      profiles: get_profiles(params),
       data: data
     )
   end
@@ -245,10 +246,16 @@ defmodule SchemaWeb.PageController do
   end
 
   defp sort_attributes_by_key(map) do
-    Map.update!(map, :attributes, &sort_by_descoped_key/1)
+    Map.update!(map, :attributes, &sort_by_key/1)
   end
 
-  # Profile names are still scoped, so this remained necessary
+  defp sort_by_key(map) do
+    Enum.sort(map, fn {k1, _}, {k2, _} ->
+      Atom.to_string(k1) <= Atom.to_string(k2)
+    end)
+  end
+
+  # Profile names are still scoped, so this remains necessary
   defp sort_by_descoped_key(map) do
     Enum.sort(map, fn {k1, _}, {k2, _} ->
       Schema.Utils.descope(k1) <= Schema.Utils.descope(k2)
@@ -269,5 +276,14 @@ defmodule SchemaWeb.PageController do
         |> Enum.map(&String.trim/1)
         |> MapSet.new()
     end
+  end
+
+  @doc """
+    Returns the list of profiles.
+  """
+  @spec get_profiles(map) :: map
+  def get_profiles(params) do
+    extensions = SchemaController.parse_options(SchemaController.extensions(params))
+    Schema.profiles_filter_extensions(extensions)
   end
 end

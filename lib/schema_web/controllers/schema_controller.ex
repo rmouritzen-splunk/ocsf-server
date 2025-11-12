@@ -376,16 +376,6 @@ defmodule SchemaWeb.SchemaController do
   end
 
   @doc """
-    Returns the list of profiles.
-  """
-  @spec get_profiles(map) :: map
-  def get_profiles(params) do
-    # TODO: evaluate page_controller.ex uses of this function
-    extensions = parse_options(extensions(params))
-    Schema.profiles_filter_extensions(extensions)
-  end
-
-  @doc """
   Get a profile by name.
   get /api/profiles/:name
   get /api/profiles/:extension/:name
@@ -528,17 +518,6 @@ defmodule SchemaWeb.SchemaController do
     extensions = parse_options(extensions(params))
     data = Schema.clean_dictionary_filter_extensions(extensions)
     send_json_resp(conn, data)
-  end
-
-  @doc """
-  Renders the dictionary.
-  """
-  @spec dictionary(map()) :: map()
-  def dictionary(params) do
-    # TODO: This is only used by page_controller.ex.
-    #       Reevalute page_controller.ex use of this function.
-    #       Perhaps move parse_options and extensions to shared utilities.
-    parse_options(extensions(params)) |> Schema.dictionary_filter_extensions()
   end
 
   @doc """
@@ -719,20 +698,6 @@ defmodule SchemaWeb.SchemaController do
       end)
 
     send_json_resp(conn, objects)
-  end
-
-  @spec objects(map) :: map
-  def objects(params) do
-    # TODO: This is only used by page_controller.ex. Reevalute.
-    parse_options(extensions(params)) |> Schema.objects_filter_extensions()
-  end
-
-  @spec object(map) :: map() | nil
-  def object(%{"id" => id} = params) do
-    # TODO: Only used by page_controller.ex. Reevalute.
-    profiles = parse_options(profiles(params))
-    extensions = parse_options(extensions(params))
-    Schema.object_filter_extensions_profiles(id, extensions, profiles)
   end
 
   # -------------------
@@ -1488,14 +1453,14 @@ defmodule SchemaWeb.SchemaController do
 
   defp verbose(_), do: 1
 
-  defp profiles(params), do: params["profiles"]
-  defp extensions(params), do: params["extensions"]
+  def profiles(params), do: params["profiles"]
+  def extensions(params), do: params["extensions"]
 
   @spec parse_options(nil | String.t()) :: nil | Schema.Utils.string_set_t()
-  defp parse_options(nil), do: nil
-  defp parse_options(""), do: MapSet.new()
+  def parse_options(nil), do: nil
+  def parse_options(""), do: MapSet.new()
 
-  defp parse_options(options) do
+  def parse_options(options) do
     options
     |> String.split(",")
     |> Enum.map(fn s -> String.trim(s) end)
