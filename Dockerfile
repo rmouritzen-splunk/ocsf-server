@@ -11,18 +11,18 @@ RUN apk update && \
     apk add --no-cache openssl && \
     rm -rf /var/cache/apk/*
 
+# Set this magic ERL_FLAGS value to allow cross-compilation from Apple Silicon.
+# This (apparently) fixes a known QEMU issue. See:
+# * https://elixirforum.com/t/elixir-docker-image-wont-build-for-linux-arm64-v8-using-github-actions/56383/12
+# * https://elixirforum.com/t/unable-to-compile-default-elixir-project-from-the-getting-started-guide/57199/12
+ENV ERL_FLAGS="+JPperf true"
+
 # install hex + rebar
 RUN mix local.hex --force && \
     mix local.rebar --force
 
 # set build ENV
 ENV MIX_ENV="prod"
-
-# Set this magic ERL_FLAGS value to allow cross-compilation from Apple Silicon.
-# This (apparently) fixes a known QEMU issue. See:
-# * https://elixirforum.com/t/elixir-docker-image-wont-build-for-linux-arm64-v8-using-github-actions/56383/12
-# * https://elixirforum.com/t/unable-to-compile-default-elixir-project-from-the-getting-started-guide/57199/12
-ENV ERL_FLAGS="+JPperf true"
 
 # install mix dependencies
 COPY mix.exs mix.lock ./
