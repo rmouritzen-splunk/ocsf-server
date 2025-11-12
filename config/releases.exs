@@ -24,7 +24,8 @@ config :schema_server, SchemaWeb.Endpoint,
   ],
   url: [
     host: System.get_env("HOST") || "localhost",
-    port: System.get_env("URL_PORT") || 8000
+    port: System.get_env("URL_PORT") || 8000,
+    path: System.get_env("SCHEMA_WEB_PATH") || "/"
   ]
 
 # Configures the locations of the schema files
