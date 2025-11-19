@@ -533,6 +533,11 @@ defmodule SchemaWeb.PageView do
         css_classes <> "no-group"
       end
 
+    # TODO: The JavaScript filter is still necessary. This profile filtering needs to be fixed.
+    #       Either fix the JavaScript change the backend to do all filtering or something else.
+    #       We may be able to remove this css_classes logic and most if not all of the code in
+    #       app.js.
+    #
     # This is broken now that attributes can have more than one profile because app.js assumes
     # a row will have either a CSS class based on a single profile OR no-profile. The visibility
     # is based on the number of CSS classes (app.js line 170).
