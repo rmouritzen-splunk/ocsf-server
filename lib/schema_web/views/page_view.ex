@@ -184,15 +184,23 @@ defmodule SchemaWeb.PageView do
         uid -> name <> "<span class='uid'> [#{uid}]</span>"
       end
 
-    case field[:extension] do
-      nil ->
-        name
-
-      extension when extension != "" ->
+    cond do
+      field[:extension] != nil and field[:extension] != "" ->
         name <>
-          " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>"
+          " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{field[:extension]} extension'><i class='fas fa-layer-group'></i></sup>"
 
-      _ ->
+      field[:_patched_by_extensions] ->
+        patched_by_extensions = field[:_patched_by_extensions]
+
+        if Enum.count(patched_by_extensions) == 1 do
+          name <>
+            " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by #{Enum.at(patched_by_extensions, 0)} extension'><i class='fas fa-code-merge'></i></sup>"
+        else
+          name <>
+            " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by extensions: #{Enum.intersperse(patched_by_extensions, ", ")}'><i class='fas fa-code-merge'></i></sup>"
+        end
+
+      true ->
         name
     end
   end
@@ -235,17 +243,29 @@ defmodule SchemaWeb.PageView do
     source_indicators = []
 
     source_indicators =
-      case entity[:extension] do
-        nil ->
-          source_indicators
-
-        extension when extension != "" ->
+      cond do
+        entity[:extension] != nil and entity[:extension] != "" ->
           [
-            "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>"
+            "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{entity[:extension]} extension'><i class='fas fa-layer-group'></i></sup>"
             | source_indicators
           ]
 
-        _ ->
+        entity[:_patched_by_extensions] ->
+          patched_by_extensions = entity[:_patched_by_extensions]
+
+          if Enum.count(patched_by_extensions) == 1 do
+            [
+              "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by #{Enum.at(patched_by_extensions, 0)} extension'><i class='fas fa-code-merge'></i></sup>"
+              | source_indicators
+            ]
+          else
+            [
+              "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by extensions: #{Enum.intersperse(patched_by_extensions, ", ")}'><i class='fas fa-code-merge'></i></sup>"
+              | source_indicators
+            ]
+          end
+
+        true ->
           source_indicators
       end
 
