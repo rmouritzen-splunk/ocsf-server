@@ -21,7 +21,7 @@ defmodule Schema do
   @dialyzer :no_improper_lists
 
   @doc """
-    Returns the schema version string.
+  Returns the schema version string.
   """
   @spec version() :: String.t()
   def version() do
@@ -42,8 +42,8 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the entire schema. Useful for pages making a lot of iteretive calls that need
-    schema information.
+  Returns the entire schema. Useful for pages making a lot of iteretive calls that need schema
+  information.
   """
   @spec schema() :: map()
   def schema() do
@@ -51,8 +51,8 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the entire clean schema, without browser information. Useful for API handlers that
-    make many iterative calls that needs schema information.
+  Returns the entire clean schema, without browser information. Useful for API handlers that
+  make many iterative calls that needs schema information.
   """
   @spec schema() :: map()
   def clean_schema() do
@@ -60,7 +60,7 @@ defmodule Schema do
   end
 
   @doc """
-    Get the data types themselves (without the top level types caption, description, etc.).
+  Returns the data types themselves (without the top level types caption, description, etc.).
   """
   @spec data_types_attributes() :: any
   def data_types_attributes() do
@@ -68,7 +68,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the schema extensions.
+  Returns the schema extensions.
   """
   @spec extensions() :: map()
   def extensions() do
@@ -76,7 +76,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the schema profiles with browser information.
+  Returns the schema profiles with browser information.
   """
   @spec profiles() :: map()
   def profiles() do
@@ -84,7 +84,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the schema profiles without browser information.
+  Returns the schema profiles without browser information.
   """
   @spec clean_profiles() :: map()
   def clean_profiles() do
@@ -102,7 +102,7 @@ defmodule Schema do
   end
 
   @doc """
-    Reloads the event schema without the extensions.
+  Reloads the event schema without the extensions.
   """
   @spec reload() :: :ok
   def reload() do
@@ -110,7 +110,7 @@ defmodule Schema do
   end
 
   @doc """
-    Reloads the event schema with extensions from the given path.
+  Reloads the event schema with extensions from the given path.
   """
   @spec reload(String.t() | list()) :: :ok
   def reload(path) do
@@ -118,7 +118,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the event categories defined in the given extension set.
+  Returns the event categories defined in the given extension set.
   """
   @spec categories_filter_extensions(Utils.string_set_t() | nil) :: map()
   def categories_filter_extensions(extensions) do
@@ -145,7 +145,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the attribute dictionary.
+  Returns the attribute dictionary.
   """
   @spec dictionary() :: Utils.dictionary_t()
   def dictionary() do
@@ -153,7 +153,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the attribute dictionary including the extension.
+  Returns the attribute dictionary including the extension.
   """
   @spec dictionary_filter_extensions(Utils.string_set_t()) :: Utils.dictionary_t()
   def dictionary_filter_extensions(extensions) do
@@ -164,7 +164,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the attribute dictionary including the extension, without browser infomation.
+  Returns the attribute dictionary including the extension, without browser infomation.
   """
   @spec clean_dictionary_filter_extensions(Utils.string_set_t()) :: Utils.dictionary_t()
   def clean_dictionary_filter_extensions(extensions) do
@@ -175,7 +175,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the data types defined in dictionary. Used for data types page.
+  Returns the data types defined in dictionary. Used for data types page.
   """
   @spec data_types() :: map()
   def data_types() do
@@ -183,8 +183,8 @@ defmodule Schema do
   end
 
   @doc """
-    Parameter 1 must be the actual data types as from Schema.data_types_attributes/0.
-    Returns true if parameter 2 (type) is valid against parameter 3 (base type)
+  Parameter 1 must be the actual data types as from Schema.data_types_attributes/0.
+  Returns true if parameter 2 (type) is valid against parameter 3 (base type)
   """
   @spec data_type?(map(), String.t(), String.t() | list(String.t())) :: boolean()
   def data_type?(_data_types, type, type) do
@@ -210,7 +210,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns all event classes.
+  Returns all event classes.
   """
   @spec classes() :: map()
   def classes() do
@@ -222,6 +222,10 @@ defmodule Schema do
     SingleRepo.clean_classes() |> Utils.filter_items_by_extensions(extensions)
   end
 
+  @doc """
+  Returns clean classes (without browser information) filtered by extensions and profiles.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
+  """
   @spec clean_classes_filter_extensions_profiles(
           Utils.string_set_t() | nil,
           Utils.string_set_t() | nil
@@ -242,7 +246,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns a single event class.
+  Returns a single event class.
   """
   @spec class(atom() | String.t()) :: nil | Utils.class_t()
   def class(id) do
@@ -250,7 +254,8 @@ defmodule Schema do
   end
 
   @doc """
-    Returns class with attributes filtered by profiles.
+  Returns class with attributes filtered by profiles.
+  This is meant for the class page. When profiles is nil, it is treated like an empty set.
   """
   @spec class_filter_profiles(
           String.t(),
@@ -266,12 +271,17 @@ defmodule Schema do
         nil
 
       class ->
-        Utils.filter_item_attributes_by_profiles(class, profiles)
+        if profiles do
+          Utils.filter_item_attributes_by_profiles(class, profiles)
+        else
+          Utils.filter_item_attributes_by_profiles(class, MapSet.new([]))
+        end
     end
   end
 
   @doc """
-    Returns class with attributes filtered by profiles, without browser info.
+  Returns class with attributes filtered by profiles, without browser info.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
   @spec clean_class_filter_profiles(
           String.t(),
@@ -313,7 +323,7 @@ defmodule Schema do
   end
 
   @doc """
-    Returns a single object.
+  Returns a single object.
   """
   @spec object(atom | String.t()) :: nil | Utils.object_t()
   def object(id) do
@@ -326,22 +336,26 @@ defmodule Schema do
     |> Utils.filter_item_links_by_extensions(extensions)
   end
 
+  @doc """
+  Returns object filtered by extensions and profiles.
+  This is meant for the object page. When profiles is nil, it is treated same as an empty set.
+  """
   @spec object_filter_extensions_profiles(
           String.t(),
           Utils.string_set_t() | nil,
           Utils.string_set_t() | nil
         ) :: nil | map()
-  def object_filter_extensions_profiles(id, extensions, nil) do
-    object_filter_extensions(id, extensions)
-  end
-
   def object_filter_extensions_profiles(id, extensions, profiles) do
     case object_filter_extensions(id, extensions) do
       nil ->
         nil
 
       object ->
-        Utils.filter_item_attributes_by_profiles(object, profiles)
+        if profiles do
+          Utils.filter_item_attributes_by_profiles(object, profiles)
+        else
+          Utils.filter_item_attributes_by_profiles(object, MapSet.new([]))
+        end
     end
   end
 
@@ -351,6 +365,10 @@ defmodule Schema do
     |> Utils.filter_item_links_by_extensions(extensions)
   end
 
+  @doc """
+  Returns object filtered by extensions and profiles.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
+  """
   @spec clean_object_filter_extensions_profiles(
           String.t(),
           Utils.string_set_t() | nil,
@@ -376,7 +394,8 @@ defmodule Schema do
   # ---------------------------------------------- #
 
   @doc """
-    Returns class with referenced objects, with attributes filtered by profiles.
+  Returns class with referenced objects, with attributes filtered by profiles.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
   @spec class_with_referenced_objects_filter_profiles(
           String.t(),
@@ -398,7 +417,8 @@ defmodule Schema do
   end
 
   @doc """
-    Returns object with referenced objects, with attributes filtered by extensions and profiles.
+  Returns object with referenced objects, and with attributes filtered by extensions and profiles.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
   @spec object_with_referenced_objects_filter_extensions_profiles(
           String.t(),
