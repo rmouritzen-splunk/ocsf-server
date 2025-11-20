@@ -35,6 +35,15 @@
           </span>
         <% end %>
       </span>
+      <%= if @data[:_patched_by_extensions] do %>
+        <span class="small">
+        <%= if Enum.count(@data[:_patched_by_extensions]) == 1 do %>
+            patched by <%= Enum.at(@data[:_patched_by_extensions], 0) %> extension
+        <% else %>
+            patched by extensions: <%= Enum.intersperse(@data[:_patched_by_extensions], ", ") %>
+        <% end %>
+        </span>
+      <% end %>
       <%= raw profile_badges(@conn, @data, @profiles) %>
     </h3>
 
