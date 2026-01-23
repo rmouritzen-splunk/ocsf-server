@@ -174,18 +174,18 @@ defmodule Schema.Cache do
   @spec export_classes(__MODULE__.t()) :: map()
   def export_classes(%__MODULE__{classes: classes, dictionary: dictionary}) do
     Enum.into(classes, Map.new(), fn {name, class} ->
-      {name, enrich(class, dictionary[:attributes])}
+      {name, enrich(class, dictionary)}
     end)
   end
 
   @spec export_base_event(__MODULE__.t()) :: map()
   def export_base_event(%__MODULE__{base_event: base_event, dictionary: dictionary}) do
-    enrich(base_event, dictionary[:attributes])
+    enrich(base_event, dictionary)
   end
 
   @spec class(__MODULE__.t(), atom()) :: nil | class_t()
   def class(%__MODULE__{dictionary: dictionary, base_event: base_event}, :base_event) do
-    enrich(base_event, dictionary[:attributes])
+    enrich(base_event, dictionary)
   end
 
   def class(%__MODULE__{dictionary: dictionary, classes: classes}, id) do
@@ -194,7 +194,7 @@ defmodule Schema.Cache do
         nil
 
       class ->
-        enrich(class, dictionary[:attributes])
+        enrich(class, dictionary)
     end
   end
 
@@ -225,7 +225,7 @@ defmodule Schema.Cache do
   @spec find_class(Schema.Cache.t(), any) :: nil | map
   def find_class(%__MODULE__{dictionary: dictionary, classes: classes}, uid) do
     case Enum.find(classes, fn {_, class} -> class[:uid] == uid end) do
-      {_, class} -> enrich(class, dictionary[:attributes])
+      {_, class} -> enrich(class, dictionary)
       nil -> nil
     end
   end
@@ -236,7 +236,7 @@ defmodule Schema.Cache do
   @spec export_objects(__MODULE__.t()) :: map()
   def export_objects(%__MODULE__{dictionary: dictionary, objects: objects}) do
     Enum.into(objects, Map.new(), fn {name, object} ->
-      {name, enrich(object, dictionary[:attributes])}
+      {name, enrich(object, dictionary)}
     end)
   end
 
@@ -247,7 +247,7 @@ defmodule Schema.Cache do
         nil
 
       object ->
-        enrich(object, dictionary[:attributes])
+        enrich(object, dictionary)
     end
   end
 
@@ -263,11 +263,14 @@ defmodule Schema.Cache do
     end
   end
 
-  defp enrich(type, dictionary_attributes) do
-    Map.update!(type, :attributes, fn list -> update_attributes(list, dictionary_attributes) end)
+  defp enrich(type, dictionary) do
+    Map.update!(type, :attributes, fn list -> update_attributes(list, dictionary) end)
   end
 
-  defp update_attributes(attributes, dictionary_attributes) do
+  defp update_attributes(attributes, dictionary) do
+    dictionary_attributes = dictionary[:attributes]
+    types = dictionary[:types][:attributes]
+
     attributes
     |> Enum.map(fn {name, attribute} ->
       case find_attribute(dictionary_attributes, name, attribute[:_source]) do
@@ -276,7 +279,18 @@ defmodule Schema.Cache do
           {name, attribute}
 
         base ->
-          {name, Utils.deep_merge(base, attribute)}
+          new_attribute = Utils.deep_merge(base, attribute)
+
+          new_attribute =
+            if attribute[:type] do
+              dict_type = types[String.to_atom(attribute[:type])]
+              type_name = dict_type[:caption] || attribute[:type]
+              Map.put(new_attribute, :type_name, type_name)
+            else
+              new_attribute
+            end
+
+          {name, new_attribute}
       end
     end)
     |> Utils.add_sibling_of_to_attributes()
