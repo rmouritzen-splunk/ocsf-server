@@ -70,6 +70,9 @@ defmodule Schema.SingleRepo do
                       schema_file: schema_file
                     }
 
+                    # reduce initial memory usage a bit
+                    :erlang.garbage_collect()
+
                     {:ok, state}
                 end
 
@@ -139,9 +142,9 @@ defmodule Schema.SingleRepo do
     %{
       categories: schema[:categories],
       dictionary: schema[:dictionary] |> Utils.clean_item(),
-      classes: Utils.clean_items(schema[:classes]),
-      objects: Utils.clean_items(schema[:objects]),
-      profiles: Utils.clean_items(schema[:profiles]),
+      classes: schema[:classes] |> Utils.clean_items(),
+      objects: schema[:objects] |> Utils.clean_items(),
+      profiles: schema[:profiles] |> Utils.clean_items(),
       extensions: schema[:extensions],
       version: schema[:version],
       compile_version: schema[:compile_version]
