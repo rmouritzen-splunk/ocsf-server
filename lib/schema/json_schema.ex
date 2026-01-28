@@ -24,7 +24,7 @@ defmodule Schema.JsonSchema do
   def encode(item, options) when is_map(item) do
     Process.put(:options, options || [])
 
-    data_types = Schema.data_types_attributes()
+    data_types = Schema.clean_data_types_attributes()
 
     try do
       encode_item(item, data_types)

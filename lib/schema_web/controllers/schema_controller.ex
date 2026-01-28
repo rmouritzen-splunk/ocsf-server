@@ -335,7 +335,7 @@ defmodule SchemaWeb.SchemaController do
 
   @spec data_types(Plug.Conn.t(), any) :: Plug.Conn.t()
   def data_types(conn, _params) do
-    send_json_resp(conn, Schema.data_types_attributes())
+    send_json_resp(conn, Schema.clean_data_types_attributes())
   end
 
   @doc """
@@ -352,7 +352,7 @@ defmodule SchemaWeb.SchemaController do
 
   @spec extensions(Plug.Conn.t(), any) :: Plug.Conn.t()
   def extensions(conn, _params) do
-    extensions = Schema.extensions()
+    extensions = Schema.clean_extensions()
     send_json_resp(conn, extensions)
   end
 
@@ -371,7 +371,7 @@ defmodule SchemaWeb.SchemaController do
   @spec profiles(Plug.Conn.t(), any) :: Plug.Conn.t()
   def profiles(conn, params) do
     extensions = parse_options(extensions(params))
-    profiles = Schema.profiles_filter_extensions(extensions)
+    profiles = Schema.clean_profiles_filter_extensions(extensions)
     send_json_resp(conn, profiles)
   end
 
@@ -448,7 +448,7 @@ defmodule SchemaWeb.SchemaController do
 
   @spec categories(map()) :: map()
   def categories(params) do
-    parse_options(extensions(params)) |> Schema.categories_filter_extensions()
+    parse_options(extensions(params)) |> Schema.clean_categories_filter_extensions()
   end
 
   @doc """
@@ -491,7 +491,7 @@ defmodule SchemaWeb.SchemaController do
     id = params["id"]
     extensions = parse_options(extensions(params))
 
-    Schema.category_filter_extensions(id, extensions)
+    Schema.clean_category_filter_extensions(id, extensions)
   end
 
   @doc """

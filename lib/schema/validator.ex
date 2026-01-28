@@ -28,7 +28,7 @@ defmodule Schema.Validator do
   defp validate_class(nil, _data), do: %{:error => "Missing class_uid"}
 
   defp validate_class(class_uid, data) do
-    data_types = Schema.data_types_attributes()
+    data_types = Schema.clean_data_types_attributes()
     profiles = get_in(data, ["metadata", "profiles"]) || []
 
     Logger.info("validate class: #{class_uid} using profiles: #{inspect(profiles)}")

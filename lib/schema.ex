@@ -62,8 +62,8 @@ defmodule Schema do
   @doc """
   Returns the data types themselves (without the top level types caption, description, etc.).
   """
-  @spec data_types_attributes() :: any
-  def data_types_attributes() do
+  @spec clean_data_types_attributes() :: any
+  def clean_data_types_attributes() do
     SingleRepo.clean_dictionary()[:types][:attributes]
   end
 
@@ -72,15 +72,19 @@ defmodule Schema do
   """
   @spec extensions() :: map()
   def extensions() do
+    # Note: SingleRepo.extensions() and SingleRepo.clean_extensions() return the same data.
+    #       The difference is intent, with "clean" being ideal for APIs.
     SingleRepo.extensions()
   end
 
   @doc """
-  Returns the schema profiles with browser information.
+  Returns the schema extensions.
   """
-  @spec profiles() :: map()
-  def profiles() do
-    SingleRepo.profiles()
+  @spec clean_extensions() :: map()
+  def clean_extensions() do
+    # Note: SingleRepo.extensions() and SingleRepo.clean_extensions() return the same data.
+    #       The difference is intent, with "clean" being ideal for APIs.
+    SingleRepo.clean_extensions()
   end
 
   @doc """
@@ -91,11 +95,17 @@ defmodule Schema do
     SingleRepo.clean_profiles()
   end
 
+  @doc """
+  Returns the schema profiles filtered, with browser information.
+  """
   @spec profiles_filter_extensions(Utils.string_set_t() | nil) :: map()
   def profiles_filter_extensions(extensions) do
     SingleRepo.profiles() |> Utils.filter_items_by_extensions(extensions)
   end
 
+  @doc """
+  Returns the schema profiles filtered, without browser information.
+  """
   @spec clean_profiles_filter_extensions(Utils.string_set_t() | nil) :: map()
   def clean_profiles_filter_extensions(extensions) do
     SingleRepo.clean_profiles() |> Utils.filter_items_by_extensions(extensions)
@@ -120,9 +130,9 @@ defmodule Schema do
   @doc """
   Returns the event categories defined in the given extension set.
   """
-  @spec categories_filter_extensions(Utils.string_set_t() | nil) :: map()
-  def categories_filter_extensions(extensions) do
-    schema = SingleRepo.schema()
+  @spec clean_categories_filter_extensions(Utils.string_set_t() | nil) :: map()
+  def clean_categories_filter_extensions(extensions) do
+    schema = SingleRepo.clean_schema()
 
     schema[:categories]
     |> Map.update!(:attributes, fn attributes ->
@@ -136,12 +146,16 @@ defmodule Schema do
     end)
   end
 
-  @spec category_filter_extensions(
+  @spec clean_category_filter_extensions(
           String.t(),
           Utils.string_set_t() | nil
         ) :: nil | Utils.category_t()
-  def category_filter_extensions(id, extensions) do
-    category_with_classes_filter_extension(SingleRepo.schema(), Utils.to_uid(id), extensions)
+  def clean_category_filter_extensions(id, extensions) do
+    category_with_classes_filter_extension(
+      SingleRepo.clean_schema(),
+      Utils.to_uid(id),
+      extensions
+    )
   end
 
   @doc """
@@ -183,7 +197,7 @@ defmodule Schema do
   end
 
   @doc """
-  Parameter 1 must be the actual data types as from Schema.data_types_attributes/0.
+  Parameter 1 must be the actual data types as from Schema.clean_data_types_attributes/0.
   Returns true if parameter 2 (type) is valid against parameter 3 (base type)
   """
   @spec data_type?(map(), String.t(), String.t() | list(String.t())) :: boolean()
@@ -670,7 +684,7 @@ defmodule Schema do
 
         category_uid = Atom.to_string(id)
 
-        list =
+        classes_list =
           classes
           |> Stream.filter(fn {_name, class} ->
             cat = Map.get(class, :category)
@@ -686,8 +700,15 @@ defmodule Schema do
           end)
           |> Enum.to_list()
 
-        Map.put(category, :classes, list)
+        category
         |> Map.put(:name, category_uid)
+        # Change classes_list to a map while reducing each class
+        |> Map.put(
+          :classes,
+          Enum.into(classes_list, %{}, fn {name, class} ->
+            {name, reduce_class(class)}
+          end)
+        )
     end
   end
 

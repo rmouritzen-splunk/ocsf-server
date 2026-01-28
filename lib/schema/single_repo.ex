@@ -202,6 +202,9 @@ defmodule Schema.SingleRepo do
   @spec clean_profiles() :: map()
   def clean_profiles(), do: GenServer.call(__MODULE__, {:clean_schema, :profiles})
 
+  @spec clean_extensions() :: map()
+  def clean_extensions(), do: GenServer.call(__MODULE__, {:clean_schema, :extensions})
+
   @spec reload() :: :ok | {:error, String.t()}
   def reload() do
     GenServer.call(__MODULE__, {:reload, nil})
