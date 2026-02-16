@@ -1,5 +1,4 @@
 defmodule SchemaWeb.PageView do
-  alias SchemaWeb.SchemaController
   use SchemaWeb, :view
 
   @at_least_one_symbol "†"

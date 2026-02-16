@@ -309,18 +309,44 @@ defmodule Schema.JsonReader do
               if ext_attribute[:overwrite] == true do
                 case base_attributes[ext_attribute_name] do
                   nil ->
+                    Logger.debug(
+                      "Extension #{inspect(ext_name)} with overwrite and is adding dictionary" <>
+                        " attribute #{inspect(ext_attribute_name)}"
+                    )
+
                     ext_attribute_tuple
 
                   base_attribute ->
+                    Logger.debug(
+                      "Extension #{inspect(ext_name)} with overwrite is merging dictionary" <>
+                        " attribute #{inspect(ext_attribute_name)} with existing base attribute"
+                    )
+
                     # Base attributes have ext attribute
                     # Shallowly merge, preferring ext_attribute
                     {ext_attribute_name, Map.merge(base_attribute, ext_attribute)}
                 end
               else
-                # ext_attribute does not have overwrite, so add to base but scope the
-                #  attribute name to avoid a potential collision with a base attribute
+                # ext_attribute does not have overwrite, so adding with extension-scoped
+                #  attribute name, avoiding potential collision with a base attribute
+
+                ext_scoped_attribute_name = Utils.to_uid(ext_name, ext_attribute_name)
+
+                if Map.has_key?(base_attributes, ext_attribute_name) do
+                  Logger.warning(
+                    "Extension #{inspect(ext_name)} is adding scoped dictionary attribute" <>
+                      " #{inspect(ext_scoped_attribute_name)}, shadowing base attribute" <>
+                      " #{inspect(ext_attribute_name)} for this extension"
+                  )
+                else
+                  Logger.debug(
+                    "Extension #{inspect(ext_name)} is adding scoped dictionary attribute" <>
+                      " #{inspect(ext_scoped_attribute_name)}"
+                  )
+                end
+
                 {
-                  Utils.to_uid(ext_name, ext_attribute_name),
+                  ext_scoped_attribute_name,
                   add_extension(ext_attribute, ext_name, ext_uid)
                 }
               end
