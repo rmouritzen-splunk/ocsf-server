@@ -12,6 +12,8 @@ defmodule Schemas do
   This module provides function to work with multiple schema versions.
   """
 
+  # TODO: scoped - This is final version (I think).
+  #                Verify and remove these TODOs.
   # TODO: Convert to support compiled schema files.
   #       Initial beta release of 4.x will be run alongside existing servers
   #       probably with its own URL somehow, perhaps simply be adding a suffix,

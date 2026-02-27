@@ -12,6 +12,9 @@ defmodule Schema.Validator2 do
   OCSF Event validator, version 2.
   """
 
+  # TODO: scoped - support extension scoped names
+  #              - make sure extension-scoped names work
+
   # Implementation note:
   # The validate_* and add_* functions (other than the top level validate/1 and validate_bundle/1
   # functions) take a response and return one, possibly updated.
@@ -214,7 +217,8 @@ defmodule Schema.Validator2 do
       cond do
         is_list(profiles) ->
           # Ensure each profile is actually defined
-          schema_profiles = MapSet.new(Map.keys(schema[:profiles]))
+          schema_profiles =
+            schema[:profiles] |> Map.keys() |> Enum.map(&to_string/1) |> MapSet.new()
 
           {response, _} =
             Enum.reduce(

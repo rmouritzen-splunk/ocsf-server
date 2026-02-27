@@ -15,8 +15,12 @@ defmodule Schema do
   Contexts are also responsible for managing your data, regardless
   if it comes from the database, an external API or others.
   """
+
+  # TODO: scoped - support extension scoped names
+
   alias Schema.SingleRepo
   alias Schema.Utils
+  require Logger
 
   @dialyzer :no_improper_lists
 
@@ -147,15 +151,11 @@ defmodule Schema do
   end
 
   @spec clean_category_filter_extensions(
-          String.t(),
+          atom(),
           Utils.string_set_t() | nil
         ) :: nil | Utils.category_t()
   def clean_category_filter_extensions(id, extensions) do
-    category_with_classes_filter_extension(
-      SingleRepo.clean_schema(),
-      Utils.to_uid(id),
-      extensions
-    )
+    category_with_classes_filter_extension(SingleRepo.clean_schema(), id, extensions)
   end
 
   @doc """
@@ -272,15 +272,16 @@ defmodule Schema do
   This is meant for the class page. When profiles is nil, it is treated like an empty set.
   """
   @spec class_filter_profiles(
-          String.t(),
+          map(),
+          atom(),
           Utils.string_set_t() | nil
         ) :: nil | map()
-  def class_filter_profiles(id, nil) do
-    SingleRepo.classes()[Utils.to_uid(id)]
+  def class_filter_profiles(schema, id, nil) do
+    schema[:classes][id]
   end
 
-  def class_filter_profiles(id, profiles) do
-    case SingleRepo.classes()[Utils.to_uid(id)] do
+  def class_filter_profiles(schema, id, profiles) do
+    case schema[:classes][id] do
       nil ->
         nil
 
@@ -298,15 +299,15 @@ defmodule Schema do
   This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
   @spec clean_class_filter_profiles(
-          String.t(),
+          atom(),
           Utils.string_set_t() | nil
         ) :: nil | map()
   def clean_class_filter_profiles(id, nil) do
-    SingleRepo.clean_classes()[Utils.to_uid(id)]
+    SingleRepo.clean_classes()[id]
   end
 
   def clean_class_filter_profiles(id, profiles) do
-    case SingleRepo.clean_classes()[Utils.to_uid(id)] do
+    case SingleRepo.clean_classes()[id] do
       nil ->
         nil
 
@@ -344,9 +345,13 @@ defmodule Schema do
     SingleRepo.objects()[Utils.to_uid(id)]
   end
 
-  @spec object_filter_extensions(String.t(), Utils.string_set_t() | nil) :: nil | map()
-  defp object_filter_extensions(id, extensions) when is_binary(id) do
-    SingleRepo.objects()[Utils.to_uid(id)]
+  @spec object_filter_extensions(
+          map(),
+          atom(),
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  defp object_filter_extensions(schema, id, extensions) do
+    schema[:objects][id]
     |> Utils.filter_item_links_by_extensions(extensions)
   end
 
@@ -355,12 +360,13 @@ defmodule Schema do
   This is meant for the object page. When profiles is nil, it is treated same as an empty set.
   """
   @spec object_filter_extensions_profiles(
-          String.t(),
+          map(),
+          atom(),
           Utils.string_set_t() | nil,
           Utils.string_set_t() | nil
         ) :: nil | map()
-  def object_filter_extensions_profiles(id, extensions, profiles) do
-    case object_filter_extensions(id, extensions) do
+  def object_filter_extensions_profiles(schema, id, extensions, profiles) do
+    case object_filter_extensions(schema, id, extensions) do
       nil ->
         nil
 
@@ -373,9 +379,9 @@ defmodule Schema do
     end
   end
 
-  @spec clean_object_filter_extensions(String.t(), Utils.string_set_t() | nil) :: nil | map()
-  defp clean_object_filter_extensions(id, extensions) when is_binary(id) do
-    SingleRepo.clean_objects()[Utils.to_uid(id)]
+  @spec clean_object_filter_extensions(atom(), Utils.string_set_t() | nil) :: nil | map()
+  defp clean_object_filter_extensions(id, extensions) do
+    SingleRepo.clean_objects()[id]
     |> Utils.filter_item_links_by_extensions(extensions)
   end
 
@@ -384,7 +390,7 @@ defmodule Schema do
   This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
   @spec clean_object_filter_extensions_profiles(
-          String.t(),
+          atom(),
           Utils.string_set_t() | nil,
           Utils.string_set_t() | nil
         ) :: nil | map()
@@ -412,14 +418,14 @@ defmodule Schema do
   This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
   @spec class_with_referenced_objects_filter_profiles(
-          String.t(),
+          atom(),
           Utils.string_set_t() | nil
         ) :: nil | map()
   def class_with_referenced_objects_filter_profiles(id, profiles) do
     schema = SingleRepo.schema()
     objects = schema[:objects]
 
-    case schema[:classes][Utils.to_uid(id)] do
+    case schema[:classes][id] do
       nil ->
         nil
 
@@ -432,18 +438,22 @@ defmodule Schema do
 
   @doc """
   Returns object with referenced objects, and with attributes filtered by extensions and profiles.
-  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
+  When profiles is nil, attributes are not filtered by profiles.
   """
   @spec object_with_referenced_objects_filter_extensions_profiles(
-          String.t(),
+          atom(),
           Utils.string_set_t() | nil,
           Utils.string_set_t() | nil
         ) :: nil | map()
-  def object_with_referenced_objects_filter_extensions_profiles(id, extensions, profiles) do
+  def object_with_referenced_objects_filter_extensions_profiles(
+        id,
+        extensions,
+        profiles
+      ) do
     schema = SingleRepo.schema()
     objects = schema[:objects]
 
-    case schema[:objects][Utils.to_uid(id)] do
+    case schema[:objects][id] do
       nil ->
         nil
 

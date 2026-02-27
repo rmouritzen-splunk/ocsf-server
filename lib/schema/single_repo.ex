@@ -51,16 +51,6 @@ defmodule Schema.SingleRepo do
                     ext_json = Jason.encode!(schema[:extensions], pretty: true)
                     Logger.info("Schema extension(s) : #{ext_json}")
 
-                    schema =
-                      schema
-                      # Profiles do _not_ use atom keys, probably because profiles from extensions
-                      # use extension-scoped keys.
-                      |> Map.update!(:profiles, fn profiles ->
-                        Enum.into(profiles, %{}, fn {name, profile} ->
-                          {Atom.to_string(name), profile}
-                        end)
-                      end)
-
                     clean_schema = clean_schema(schema)
 
                     state = %{
@@ -70,7 +60,7 @@ defmodule Schema.SingleRepo do
                       schema_file: schema_file
                     }
 
-                    # reduce initial memory usage a bit
+                    # Reduce initial memory usage a bit
                     :erlang.garbage_collect()
 
                     {:ok, state}

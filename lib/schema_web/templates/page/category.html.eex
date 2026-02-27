@@ -8,11 +8,16 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+TODO: scoped - support extension scoped names
+TODO: scoped - show extension name
+
 --%>
 
 <div class="row">
   <div class="col-md move-up">
-    <h3><%= @data[:caption] %>
+    <h3>
+      <%= @data[:caption] %>
       <span class="text-secondary">
         [<%= @data[:uid] %>] <%= if @data[:extension] && @data[:extension] != "" do %><span class="extension-badge"><%= @data[:extension] %></span><% end %>
         Category

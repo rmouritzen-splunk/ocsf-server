@@ -1,4 +1,18 @@
 defmodule SchemaWeb.PageView do
+  # TODO: scoped - support extension scoped names
+  # TODO: scoped - show extension annotation for category on classes and class pages
+  # TODO: scoped - show extension annotation for object types
+  #                on class, object, profile, and dictionary attributes pages
+  # TODO: scoped - show extension annotation for data types
+  #                on class, object, profile, dictionary attributes, and data types pages
+  # TODO: scoped - annotate extension shadowed names; applies to the following extension items:
+  #                - category names
+  #                - class names
+  #                - object names / object type names
+  #                - dictionary attribute names
+  #                - dictionary type names (data type names)
+  #                - profile names
+
   use SchemaWeb, :view
 
   alias Schema.Utils

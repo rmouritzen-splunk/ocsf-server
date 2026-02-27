@@ -38,17 +38,26 @@ defmodule Schema.Utils do
 
   require Logger
 
-  @spec to_uid(nil | String.t() | atom()) :: atom()
-  def to_uid(nil) do
-    nil
-  end
-
+  @spec to_uid(String.t() | atom()) :: atom()
   def to_uid(name) when is_binary(name) do
     String.to_atom(name)
   end
 
   def to_uid(name) when is_atom(name) do
     name
+  end
+
+  @spec to_uid(nil | String.t() | atom(), String.t() | atom()) :: atom()
+  def to_uid(nil, name) when is_binary(name) do
+    String.to_atom(name)
+  end
+
+  def to_uid(nil, name) when is_atom(name) do
+    name
+  end
+
+  def to_uid(extension, name) do
+    String.to_atom("#{extension}/#{name}")
   end
 
   @doc """

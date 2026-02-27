@@ -26,6 +26,8 @@ defmodule SchemaWeb do
   and import those modules here.
   """
 
+  # TODO: scoped - support extension scoped names
+
   def controller do
     quote do
       use Phoenix.Controller, namespace: SchemaWeb

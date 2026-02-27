@@ -321,26 +321,6 @@ defmodule SchemaWeb.SchemaController do
     send_json_resp(conn, versions_response)
   end
 
-  @doc """
-  Get the schema data types.
-  """
-  swagger_path :data_types do
-    get("/api/data_types")
-    summary("Data types")
-    description("Get OCSF schema data types.")
-    produces("application/json")
-    tag("Objects and Types")
-    response(200, "Success")
-  end
-
-  @spec data_types(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def data_types(conn, _params) do
-    send_json_resp(conn, Schema.clean_data_types_attributes())
-  end
-
-  @doc """
-  Get the schema extensions.
-  """
   swagger_path :extensions do
     get("/api/extensions")
     summary("List extensions")
@@ -356,72 +336,6 @@ defmodule SchemaWeb.SchemaController do
     send_json_resp(conn, extensions)
   end
 
-  @doc """
-  Get the schema profiles.
-  """
-  swagger_path :profiles do
-    get("/api/profiles")
-    summary("List profiles")
-    description("Get OCSF schema profiles.")
-    produces("application/json")
-    tag("Schema")
-    response(200, "Success")
-  end
-
-  @spec profiles(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def profiles(conn, params) do
-    extensions = parse_options(extensions(params))
-    profiles = Schema.clean_profiles_filter_extensions(extensions)
-    send_json_resp(conn, profiles)
-  end
-
-  @doc """
-  Get a profile by name.
-  get /api/profiles/:name
-  get /api/profiles/:extension/:name
-  """
-  swagger_path :profile do
-    get("/api/profiles/{name}")
-    summary("Profile")
-
-    description(
-      "Get OCSF schema profile by name. The profile name may contain an extension name." <>
-        " For example, \"linux/linux_users\"."
-    )
-
-    produces("application/json")
-    tag("Schema")
-
-    parameters do
-      name(:path, :string, "Profile name", required: true)
-    end
-
-    response(200, "Success")
-    response(404, "Profile <code>name</code> not found")
-  end
-
-  @spec profile(Plug.Conn.t(), map) :: Plug.Conn.t()
-  def profile(conn, %{"id" => id} = params) do
-    name =
-      case params["extension"] do
-        nil -> id
-        extension -> "#{extension}/#{id}"
-      end
-
-    data = Schema.clean_profiles()
-
-    case Map.get(data, name) do
-      nil ->
-        send_json_resp(conn, 404, %{error: "Profile #{name} not found"})
-
-      profile ->
-        send_json_resp(conn, profile)
-    end
-  end
-
-  @doc """
-  Get the schema categories.
-  """
   swagger_path :categories do
     get("/api/categories")
     summary("List categories")
@@ -438,9 +352,6 @@ defmodule SchemaWeb.SchemaController do
     response(200, "Success")
   end
 
-  @doc """
-  Returns the list of categories.
-  """
   @spec categories(Plug.Conn.t(), map) :: Plug.Conn.t()
   def categories(conn, params) do
     send_json_resp(conn, categories(params))
@@ -454,7 +365,7 @@ defmodule SchemaWeb.SchemaController do
   @doc """
   Get the classes defined in a given category.
   """
-  swagger_path :category do
+  swagger_path :category_by_id do
     get("/api/categories/{name}")
     summary("List category classes")
 
@@ -475,11 +386,11 @@ defmodule SchemaWeb.SchemaController do
     response(404, "Category <code>name</code> not found")
   end
 
-  @spec category(Plug.Conn.t(), map) :: Plug.Conn.t()
-  def category(conn, %{"id" => id} = params) do
+  @spec category_by_id(Plug.Conn.t(), map) :: Plug.Conn.t()
+  def category_by_id(conn, params) do
     case category_classes(params) do
       nil ->
-        send_json_resp(conn, 404, %{error: "Category #{id} not found"})
+        send_json_resp(conn, 404, %{error: "Category #{params_to_uid(params)} not found"})
 
       data ->
         send_json_resp(conn, data)
@@ -488,101 +399,62 @@ defmodule SchemaWeb.SchemaController do
 
   @spec category_classes(map()) :: map() | nil
   def category_classes(params) do
-    id = params["id"]
+    Schema.clean_category_filter_extensions(
+      params_to_uid(params),
+      parse_options(extensions(params))
+    )
+  end
+
+  swagger_path :profiles do
+    get("/api/profiles")
+    summary("List profiles")
+    description("Get OCSF schema profiles.")
+    produces("application/json")
+    tag("Schema")
+    response(200, "Success")
+  end
+
+  @spec profiles(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def profiles(conn, params) do
     extensions = parse_options(extensions(params))
-
-    Schema.clean_category_filter_extensions(id, extensions)
+    profiles = Schema.clean_profiles_filter_extensions(extensions)
+    send_json_resp(conn, profiles)
   end
 
-  @doc """
-  Get the schema dictionary.
-  """
-  swagger_path :dictionary do
-    get("/api/dictionary")
-    summary("Dictionary")
-    description("Get OCSF schema dictionary.")
+  swagger_path :profile_by_id do
+    get("/api/profiles/{name}")
+    summary("Profile")
+
+    description(
+      "Get OCSF schema profile by name. The profile name may contain an extension name." <>
+        " For example, \"linux/linux_users\"."
+    )
+
     produces("application/json")
-    tag("Dictionary")
+    tag("Schema")
 
     parameters do
-      extensions(:query, :array, "Related extensions to include in response.",
-        items: [type: :string]
-      )
+      name(:path, :string, "Profile name", required: true)
     end
 
     response(200, "Success")
+    response(404, "Profile <code>name</code> not found")
   end
 
-  @spec dictionary(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def dictionary(conn, params) do
-    extensions = parse_options(extensions(params))
-    data = Schema.clean_dictionary_filter_extensions(extensions)
-    send_json_resp(conn, data)
-  end
+  @spec profile_by_id(Plug.Conn.t(), map) :: Plug.Conn.t()
+  def profile_by_id(conn, params) do
+    id = params_to_uid(params)
+    data = Schema.clean_profiles()
 
-  @doc """
-  Get the schema base event class.
-  """
-  swagger_path :base_event do
-    get("/api/base_event")
-    summary("Base event")
-    description("Get OCSF schema base event class.")
-    produces("application/json")
-    tag("Categories and Classes")
-
-    parameters do
-      profiles(:query, :array, "Related profiles to include in response.", items: [type: :string])
-    end
-
-    response(200, "Success")
-  end
-
-  @spec base_event(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def base_event(conn, params) do
-    class(conn, "base_event", params)
-  end
-
-  @doc """
-  Get an event class by name.
-  get /api/classes/:name
-  """
-  swagger_path :class do
-    get("/api/classes/{name}")
-    summary("Event class")
-
-    description("Get OCSF schema class by name.")
-
-    produces("application/json")
-    tag("Categories and Classes")
-
-    parameters do
-      name(:path, :string, "Class name", required: true)
-      profiles(:query, :array, "Related profiles to include in response.", items: [type: :string])
-    end
-
-    response(200, "Success")
-    response(404, "Event class <code>name</code> not found")
-  end
-
-  @spec class(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def class(conn, %{"id" => id} = params) do
-    class(conn, id, params)
-  end
-
-  defp class(conn, id, params) do
-    case Schema.clean_class_filter_profiles(id, parse_options(profiles(params))) do
+    case Map.get(data, id) do
       nil ->
-        send_json_resp(conn, 404, %{error: "Event class #{id} not found"})
+        send_json_resp(conn, 404, %{error: "Profile #{id} not found"})
 
-      data ->
-        class = add_objects(data, params)
-        send_json_resp(conn, class)
+      profile ->
+        send_json_resp(conn, profile)
     end
   end
 
-  @doc """
-  Get the schema classes.
-  """
   swagger_path :classes do
     get("/api/classes")
     summary("List classes")
@@ -611,9 +483,6 @@ defmodule SchemaWeb.SchemaController do
     send_json_resp(conn, classes)
   end
 
-  @doc """
-  Returns the list of classes.
-  """
   @spec classes(map) :: map
   def classes(params) do
     extensions = parse_options(extensions(params))
@@ -627,46 +496,61 @@ defmodule SchemaWeb.SchemaController do
     end
   end
 
-  @doc """
-  Get an object by name.
-  get /api/objects/:name
-  """
-  swagger_path :object do
-    get("/api/objects/{name}")
-    summary("Object")
+  swagger_path :class_by_id do
+    get("/api/classes/{name}")
+    summary("Event class")
 
-    description("Get OCSF schema object by name.")
+    description("Get OCSF schema class by name.")
 
     produces("application/json")
-    tag("Objects and Types")
+    tag("Categories and Classes")
 
     parameters do
-      name(:path, :string, "Object name", required: true)
-
-      extensions(:query, :array, "Related extensions to include in response.",
-        items: [type: :string]
-      )
-
+      name(:path, :string, "Class name", required: true)
       profiles(:query, :array, "Related profiles to include in response.", items: [type: :string])
     end
 
     response(200, "Success")
-    response(404, "Object <code>name</code> not found")
+    response(404, "Event class <code>name</code> not found")
   end
 
-  @spec object(Plug.Conn.t(), map) :: Plug.Conn.t()
-  def object(conn, %{"id" => id} = params) do
-    profiles = parse_options(profiles(params))
-    extensions = parse_options(extensions(params))
-    object = Schema.clean_object_filter_extensions_profiles(id, extensions, profiles)
+  # TODO: scoped - Transform attributes.<name>.profiles to profile
+  #                Fail if profiles hold more than 1 profile
+  #                Add v2 API
+  @spec class_by_id(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def class_by_id(conn, params) do
+    class(conn, params_to_uid(params), params)
+  end
 
-    case object do
+  @spec class(Plug.Conn.t(), atom(), map()) :: Plug.Conn.t()
+  defp class(conn, id, params) do
+    case Schema.clean_class_filter_profiles(id, parse_options(profiles(params))) do
       nil ->
-        send_json_resp(conn, 404, %{error: "Object #{id} not found"})
+        send_json_resp(conn, 404, %{error: "Event class #{id} not found"})
 
       data ->
-        send_json_resp(conn, add_objects(data, params))
+        class = add_objects(data, params)
+        send_json_resp(conn, class)
     end
+  end
+
+  swagger_path :base_event do
+    get("/api/base_event")
+    summary("Base event")
+    description("Get OCSF schema base event class.")
+    produces("application/json")
+    tag("Categories and Classes")
+
+    parameters do
+      profiles(:query, :array, "Related profiles to include in response.", items: [type: :string])
+    end
+
+    response(200, "Success")
+  end
+
+  @spec base_event(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def base_event(conn, params) do
+    class(conn, :base_event, params)
   end
 
   @doc """
@@ -698,6 +582,89 @@ defmodule SchemaWeb.SchemaController do
       end)
 
     send_json_resp(conn, objects)
+  end
+
+  @doc """
+  Get an object by name.
+  get /api/objects/:name
+  """
+  swagger_path :object_by_id do
+    get("/api/objects/{name}")
+    summary("Object")
+
+    description("Get OCSF schema object by name.")
+
+    produces("application/json")
+    tag("Objects and Types")
+
+    parameters do
+      name(:path, :string, "Object name", required: true)
+
+      extensions(:query, :array, "Related extensions to include in response.",
+        items: [type: :string]
+      )
+
+      profiles(:query, :array, "Related profiles to include in response.", items: [type: :string])
+    end
+
+    response(200, "Success")
+    response(404, "Object <code>name</code> not found")
+  end
+
+  # TODO: scoped - Transform attributes.<name>.profiles to profile
+  #                Fail if profiles hold more than 1 profile
+  #                Add v2 API
+  @spec object_by_id(Plug.Conn.t(), map) :: Plug.Conn.t()
+  def object_by_id(conn, params) do
+    id = params_to_uid(params)
+    profiles = parse_options(profiles(params))
+    extensions = parse_options(extensions(params))
+    object = Schema.clean_object_filter_extensions_profiles(id, extensions, profiles)
+
+    case object do
+      nil ->
+        send_json_resp(conn, 404, %{error: "Object #{id} not found"})
+
+      data ->
+        send_json_resp(conn, add_objects(data, params))
+    end
+  end
+
+  swagger_path :dictionary do
+    get("/api/dictionary")
+    summary("Dictionary")
+    description("Get OCSF schema dictionary.")
+    produces("application/json")
+    tag("Dictionary")
+
+    parameters do
+      extensions(:query, :array, "Related extensions to include in response.",
+        items: [type: :string]
+      )
+    end
+
+    response(200, "Success")
+  end
+
+  @spec dictionary(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def dictionary(conn, params) do
+    extensions = parse_options(extensions(params))
+    data = Schema.clean_dictionary_filter_extensions(extensions)
+    send_json_resp(conn, data)
+  end
+
+  swagger_path :data_types do
+    get("/api/data_types")
+    summary("Data types")
+    description("Get OCSF schema data types.")
+    produces("application/json")
+    tag("Objects and Types")
+    response(200, "Success")
+  end
+
+  @spec data_types(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def data_types(conn, _params) do
+    send_json_resp(conn, Schema.clean_data_types_attributes())
   end
 
   # -------------------
@@ -892,12 +859,12 @@ defmodule SchemaWeb.SchemaController do
   end
 
   @spec json_class(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def json_class(conn, %{"id" => id} = params) do
+  def json_class(conn, params) do
     options = Map.get(params, "package_name") |> parse_java_package()
 
-    case class_ex(id, params) do
+    case class_ex(params) do
       nil ->
-        send_json_resp(conn, 404, %{error: "Event class #{id} not found"})
+        send_json_resp(conn, 404, %{error: "Event class #{params_to_uid(params)} not found"})
 
       data ->
         class = Schema.JsonSchema.encode(data, options)
@@ -905,8 +872,12 @@ defmodule SchemaWeb.SchemaController do
     end
   end
 
-  def class_ex(id, params) do
-    Schema.class_with_referenced_objects_filter_profiles(id, parse_options(profiles(params)))
+  @spec class_ex(map()) :: nil | map()
+  def class_ex(params) do
+    Schema.class_with_referenced_objects_filter_profiles(
+      params_to_uid(params),
+      parse_options(profiles(params))
+    )
   end
 
   @doc """
@@ -935,12 +906,14 @@ defmodule SchemaWeb.SchemaController do
   end
 
   @spec json_object(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def json_object(conn, %{"id" => id} = params) do
+  def json_object(conn, params) do
     options = Map.get(params, "package_name") |> parse_java_package()
 
-    case object_ex(id, params) do
+    case object_ex(params) do
       nil ->
-        send_json_resp(conn, 404, %{error: "Object #{id} not found"})
+        send_json_resp(conn, 404, %{
+          error: "Object #{params_to_uid(params)} not found"
+        })
 
       data ->
         object = Schema.JsonSchema.encode(data, options)
@@ -948,11 +921,17 @@ defmodule SchemaWeb.SchemaController do
     end
   end
 
-  def object_ex(id, params) do
+  @spec object_ex(map()) :: nil | map()
+  def object_ex(params) do
+    id = params_to_uid(params)
     profiles = parse_options(profiles(params))
     extensions = parse_options(extensions(params))
 
-    Schema.object_with_referenced_objects_filter_extensions_profiles(id, extensions, profiles)
+    Schema.object_with_referenced_objects_filter_extensions_profiles(
+      id,
+      extensions,
+      profiles
+    )
   end
 
   # ---------------------------------------------
@@ -1283,7 +1262,7 @@ defmodule SchemaWeb.SchemaController do
   @doc """
   Returns randomly generated event sample data for the base event class.
   """
-  swagger_path :sample_event do
+  swagger_path :sample_base_event do
     get("/sample/base_event")
     summary("Base event sample data")
     description("This API returns randomly generated sample data for the base event class.")
@@ -1297,9 +1276,9 @@ defmodule SchemaWeb.SchemaController do
     response(200, "Success")
   end
 
-  @spec sample_event(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def sample_event(conn, params) do
-    sample_class(conn, "base_event", params)
+  @spec sample_base_event(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def sample_base_event(conn, params) do
+    sample_class_id(conn, :base_event, params)
   end
 
   @doc """
@@ -1325,12 +1304,14 @@ defmodule SchemaWeb.SchemaController do
   end
 
   @spec sample_class(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def sample_class(conn, %{"id" => id} = params) do
-    sample_class(conn, id, params)
+  def sample_class(conn, params) do
+    id = params_to_uid(params)
+    sample_class_id(conn, id, params)
   end
 
-  defp sample_class(conn, id, options) do
-    profiles = profiles(options) |> parse_options()
+  @spec sample_class_id(Plug.Conn.t(), atom(), map()) :: Plug.Conn.t()
+  defp sample_class_id(conn, id, params) do
+    profiles = profiles(params) |> parse_options()
 
     case Schema.class(id) do
       nil ->
@@ -1338,14 +1319,14 @@ defmodule SchemaWeb.SchemaController do
 
       class ->
         event =
-          case Map.get(options, @verbose) do
+          case Map.get(params, @verbose) do
             nil ->
               Schema.generate_event(class, profiles)
 
             verbose ->
               Schema.generate_event(class, profiles)
               |> Schema.Translator.translate(
-                spaces: options[@spaces],
+                spaces: params[@spaces],
                 verbose: verbose(verbose)
               )
           end
@@ -1453,8 +1434,20 @@ defmodule SchemaWeb.SchemaController do
 
   defp verbose(_), do: 1
 
-  def profiles(params), do: params["profiles"]
-  def extensions(params), do: params["extensions"]
+  @spec params_to_uid(map()) :: atom()
+  def params_to_uid(params) do
+    Schema.Utils.to_uid(params["extension"], params["id"])
+  end
+
+  @spec profiles(map()) :: nil | String.t()
+  def profiles(params) do
+    params["profiles"]
+  end
+
+  @spec extensions(map()) :: nil | String.t()
+  def extensions(params) do
+    params["extensions"]
+  end
 
   @spec parse_options(nil | String.t()) :: nil | Schema.Utils.string_set_t()
   def parse_options(nil), do: nil

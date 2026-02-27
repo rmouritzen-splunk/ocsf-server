@@ -15,113 +15,7 @@ defmodule SchemaWeb.PageController do
 
   alias SchemaWeb.SchemaController
 
-  @spec class_graph(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def class_graph(conn, %{"id" => id} = params) do
-    case SchemaWeb.SchemaController.class_ex(id, params) do
-      nil ->
-        send_resp(conn, 404, "Not Found: #{id}")
-
-      class ->
-        data = Schema.Graph.build(class)
-
-        render(conn, "class_graph.html",
-          extensions: Schema.extensions(),
-          profiles: get_profiles(params),
-          data: data
-        )
-    end
-  end
-
-  @spec object_graph(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def object_graph(conn, %{"id" => id} = params) do
-    case SchemaWeb.SchemaController.object_ex(id, params) do
-      nil ->
-        send_resp(conn, 404, "Not Found: #{id}")
-
-      obj ->
-        data = Schema.Graph.build(obj)
-
-        render(conn, "object_graph.html",
-          extensions: Schema.extensions(),
-          profiles: get_profiles(params),
-          data: data
-        )
-    end
-  end
-
-  @doc """
-  Renders the data types.
-  """
-  @spec data_types(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def data_types(conn, params) do
-    data = Schema.data_types() |> sort_attributes_by_key()
-
-    render(conn, "data_types.html",
-      schema: Schema.schema(),
-      extensions: Schema.extensions(),
-      profiles: get_profiles(params),
-      data: data
-    )
-  end
-
-  @doc """
-  Renders schema profiles.
-  """
-  @spec profiles(Plug.Conn.t(), map) :: Plug.Conn.t()
-  def profiles(conn, %{"id" => id} = params) do
-    name =
-      case params["extension"] do
-        nil -> id
-        extension -> "#{extension}/#{id}"
-      end
-
-    profiles = get_profiles(params)
-
-    case profiles[name] do
-      nil ->
-        send_resp(conn, 404, "Not Found: #{name}")
-
-      profile ->
-        render(conn, "profile.html",
-          schema: Schema.schema(),
-          extensions: Schema.extensions(),
-          profiles: profiles,
-          data: sort_attributes_by_key(profile)
-        )
-    end
-  end
-
-  def profiles(conn, params) do
-    profiles = get_profiles(params)
-    sorted_profiles = sort_by_descoped_key(profiles)
-
-    render(conn, "profiles.html",
-      extensions: Schema.extensions(),
-      profiles: profiles,
-      data: sorted_profiles
-    )
-  end
-
-  @doc """
-  Renders categories or the classes in a given category.
-  """
-  @spec categories(Plug.Conn.t(), map) :: Plug.Conn.t()
-  def categories(conn, %{"id" => id} = params) do
-    case SchemaController.category_classes(params) do
-      nil ->
-        send_resp(conn, 404, "Not Found: #{id}")
-
-      data ->
-        classes = sort_by(data[:classes], :uid)
-
-        render(conn, "category.html",
-          extensions: Schema.extensions(),
-          profiles: get_profiles(params),
-          data: Map.put(data, :classes, classes)
-        )
-    end
-  end
-
+  @spec categories(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def categories(conn, params) do
     data =
       Map.put_new(params, "extensions", "")
@@ -136,11 +30,167 @@ defmodule SchemaWeb.PageController do
     )
   end
 
+  @spec category_by_id(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def category_by_id(conn, params) do
+    case SchemaController.category_classes(params) do
+      nil ->
+        send_resp(conn, 404, "Not Found: #{SchemaController.params_to_uid(params)}")
+
+      data ->
+        classes = sort_by(data[:classes], :uid)
+
+        render(conn, "category.html",
+          extensions: Schema.extensions(),
+          profiles: get_profiles(params),
+          data: Map.put(data, :classes, classes)
+        )
+    end
+  end
+
+  @spec profiles(Plug.Conn.t(), map) :: Plug.Conn.t()
+  def profiles(conn, params) do
+    profiles = get_profiles(params)
+    sorted_profiles = sort_by_descoped_key(profiles)
+
+    render(conn, "profiles.html",
+      extensions: Schema.extensions(),
+      profiles: profiles,
+      data: sorted_profiles
+    )
+  end
+
+  @spec profile_by_id(Plug.Conn.t(), map) :: Plug.Conn.t()
+  def profile_by_id(conn, params) do
+    id = SchemaController.params_to_uid(params)
+
+    profiles = get_profiles(params)
+
+    case profiles[id] do
+      nil ->
+        send_resp(conn, 404, "Not Found: #{id}")
+
+      profile ->
+        render(conn, "profile.html",
+          schema: Schema.schema(),
+          extensions: Schema.extensions(),
+          profiles: profiles,
+          data: sort_attributes_by_key(profile)
+        )
+    end
+  end
+
+  @spec classes(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def classes(conn, params) do
+    data = SchemaController.classes(params) |> sort_by(:uid)
+
+    render(conn, "classes.html",
+      extensions: Schema.extensions(),
+      profiles: get_profiles(params),
+      data: data
+    )
+  end
+
+  @spec class_by_id(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def class_by_id(conn, params) do
+    schema = Schema.schema()
+    id = SchemaController.params_to_uid(params)
+    profiles = parse_profiles_from_params(params)
+
+    case Schema.class_filter_profiles(schema, id, profiles) do
+      nil ->
+        send_resp(conn, 404, "Not Found: #{id}")
+
+      data ->
+        render(conn, "class.html",
+          schema: schema,
+          extensions: schema[:extensions],
+          profiles: get_profiles(params),
+          data: sort_attributes_by_key(data)
+        )
+    end
+  end
+
+  @spec class_graph(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def class_graph(conn, params) do
+    case SchemaController.class_ex(params) do
+      nil ->
+        send_resp(conn, 404, "Not Found: #{SchemaController.params_to_uid(params)}")
+
+      class ->
+        data = Schema.Graph.build(class)
+
+        render(conn, "class_graph.html",
+          extensions: Schema.extensions(),
+          profiles: get_profiles(params),
+          data: data
+        )
+    end
+  end
+
   @doc """
-  Renders the attribute dictionary.
+  Redirects from the older /base_event URL to /classes/base_event.
   """
+  @spec base_event(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def base_event(conn, _params) do
+    redirect(conn, to: "/classes/base_event")
+  end
+
+  @spec objects(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def objects(conn, params) do
+    data =
+      SchemaController.parse_options(SchemaController.extensions(params))
+      |> Schema.objects_filter_extensions()
+      |> sort_by_descoped_key()
+
+    render(conn, "objects.html",
+      schema: Schema.schema(),
+      extensions: Schema.extensions(),
+      profiles: get_profiles(params),
+      data: data
+    )
+  end
+
+  @spec object_by_id(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def object_by_id(conn, params) do
+    schema = Schema.schema()
+    id = SchemaController.params_to_uid(params)
+    profiles = SchemaController.parse_options(SchemaController.profiles(params))
+    extensions = SchemaController.parse_options(SchemaController.extensions(params))
+
+    case Schema.object_filter_extensions_profiles(schema, id, extensions, profiles) do
+      nil ->
+        send_resp(conn, 404, "Not Found: #{id}")
+
+      data ->
+        render(conn, "object.html",
+          schema: schema,
+          extensions: schema[:extensions],
+          profiles: get_profiles(params),
+          data: sort_attributes_by_key(data)
+        )
+    end
+  end
+
+  @spec object_graph(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def object_graph(conn, params) do
+    case SchemaController.object_ex(params) do
+      nil ->
+        send_resp(conn, 404, "Not Found: #{SchemaController.params_to_uid(params)}")
+
+      obj ->
+        data = Schema.Graph.build(obj)
+
+        render(conn, "object_graph.html",
+          extensions: Schema.extensions(),
+          profiles: get_profiles(params),
+          data: data
+        )
+    end
+  end
+
   @spec dictionary(Plug.Conn.t(), any) :: Plug.Conn.t()
   def dictionary(conn, params) do
+    # TODO: scoped - get schema once
     data =
       SchemaController.parse_options(SchemaController.extensions(params))
       |> Schema.dictionary_filter_extensions()
@@ -154,74 +204,11 @@ defmodule SchemaWeb.PageController do
     )
   end
 
-  @doc """
-  Redirects from the older /base_event URL to /classes/base_event.
-  """
-  @spec base_event(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def base_event(conn, _params) do
-    redirect(conn, to: "/classes/base_event")
-  end
+  @spec data_types(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def data_types(conn, params) do
+    data = Schema.data_types() |> sort_attributes_by_key()
 
-  @doc """
-  Renders event classes.
-  """
-  @spec classes(Plug.Conn.t(), any) :: Plug.Conn.t()
-  def classes(conn, %{"id" => id} = params) do
-    profiles = parse_profiles_from_params(params)
-
-    case Schema.class_filter_profiles(id, profiles) do
-      nil ->
-        send_resp(conn, 404, "Not Found: #{id}")
-
-      data ->
-        render(conn, "class.html",
-          schema: Schema.schema(),
-          extensions: Schema.extensions(),
-          profiles: get_profiles(params),
-          data: sort_attributes_by_key(data)
-        )
-    end
-  end
-
-  def classes(conn, params) do
-    data = SchemaController.classes(params) |> sort_by(:uid)
-
-    render(conn, "classes.html",
-      extensions: Schema.extensions(),
-      profiles: get_profiles(params),
-      data: data
-    )
-  end
-
-  @doc """
-  Renders objects.
-  """
-  @spec objects(Plug.Conn.t(), map) :: Plug.Conn.t()
-  def objects(conn, %{"id" => id} = params) do
-    profiles = SchemaController.parse_options(SchemaController.profiles(params))
-    extensions = SchemaController.parse_options(SchemaController.extensions(params))
-
-    case Schema.object_filter_extensions_profiles(id, extensions, profiles) do
-      nil ->
-        send_resp(conn, 404, "Not Found: #{id}")
-
-      data ->
-        render(conn, "object.html",
-          schema: Schema.schema(),
-          extensions: Schema.extensions(),
-          profiles: get_profiles(params),
-          data: sort_attributes_by_key(data)
-        )
-    end
-  end
-
-  def objects(conn, params) do
-    data =
-      SchemaController.parse_options(SchemaController.extensions(params))
-      |> Schema.objects_filter_extensions()
-      |> sort_by_key()
-
-    render(conn, "objects.html",
+    render(conn, "data_types.html",
       schema: Schema.schema(),
       extensions: Schema.extensions(),
       profiles: get_profiles(params),
@@ -255,7 +242,6 @@ defmodule SchemaWeb.PageController do
     end)
   end
 
-  # Profile names are still scoped, so this remains necessary
   defp sort_by_descoped_key(map) do
     Enum.sort(map, fn {k1, _}, {k2, _} ->
       Schema.Utils.descope(k1) <= Schema.Utils.descope(k2)

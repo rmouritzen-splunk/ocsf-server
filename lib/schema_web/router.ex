@@ -27,25 +27,30 @@ defmodule SchemaWeb.Router do
 
     get "/", PageController, :categories
     get "/categories", PageController, :categories
-    get "/categories/:id", PageController, :categories
+    get "/categories/:id", PageController, :category_by_id
+    get "/categories/:extension/:id", PageController, :category_by_id
 
     get "/profiles", PageController, :profiles
     get "/profiles/:id", PageController, :profiles
-    get "/profiles/:extension/:id", PageController, :profiles
+    get "/profiles/:extension/:id", PageController, :profile_by_id
 
     get "/classes", PageController, :classes
     get "/classes/:id", PageController, :classes
+    get "/classes/:extension/:id", PageController, :class_by_id
 
     get "/class/graph/:id", PageController, :class_graph
+    get "/class/graph/:extension/:id", PageController, :class_graph
 
     get "/base_event", PageController, :base_event
-    get "/dictionary", PageController, :dictionary
 
     get "/objects", PageController, :objects
     get "/objects/:id", PageController, :objects
+    get "/objects/:extension/:id", PageController, :objects
 
     get "/object/graph/:id", PageController, :object_graph
+    get "/object/graph/:extension/:id", PageController, :object_graph
 
+    get "/dictionary", PageController, :dictionary
     get "/data_types", PageController, :data_types
   end
 
@@ -55,25 +60,27 @@ defmodule SchemaWeb.Router do
 
     get "/version", SchemaController, :version
     get "/versions", SchemaController, :versions
-
-    get "/profiles", SchemaController, :profiles
     get "/extensions", SchemaController, :extensions
 
     get "/categories", SchemaController, :categories
-    get "/categories/:id", SchemaController, :category
+    get "/categories/:id", SchemaController, :category_by_id
+    get "/categories/:extension/:id", SchemaController, :category_by_id
 
-    get "/profiles/:id", SchemaController, :profile
-    get "/profiles/:extension/:id", SchemaController, :profile
+    get "/profiles", SchemaController, :profiles
+    get "/profiles/:id", SchemaController, :profile_by_id
+    get "/profiles/:extension/:id", SchemaController, :profile_by_id
 
     get "/classes", SchemaController, :classes
-    get "/classes/:id", SchemaController, :class
+    get "/classes/:id", SchemaController, :class_by_id
+    get "/classes/:extension/:id", SchemaController, :class_by_id
 
     get "/base_event", SchemaController, :base_event
-    get "/dictionary", SchemaController, :dictionary
 
     get "/objects", SchemaController, :objects
-    get "/objects/:id", SchemaController, :object
+    get "/objects/:id", SchemaController, :object_by_id
+    get "/objects/:extension/:id", SchemaController, :object_by_id
 
+    get "/dictionary", SchemaController, :dictionary
     get "/data_types", SchemaController, :data_types
 
     post "/enrich", SchemaController, :enrich
@@ -87,7 +94,9 @@ defmodule SchemaWeb.Router do
     pipe_through :api
 
     get "/classes/:id", SchemaController, :json_class
+    get "/classes/:extension/:id", SchemaController, :json_class
     get "/objects/:id", SchemaController, :json_object
+    get "/objects/:extension/:id", SchemaController, :json_object
   end
 
   scope "/export", SchemaWeb do
@@ -103,9 +112,11 @@ defmodule SchemaWeb.Router do
   scope "/sample", SchemaWeb do
     pipe_through :api
 
-    get "/base_event", SchemaController, :sample_event
+    get "/base_event", SchemaController, :sample_base_event
     get "/objects/:id", SchemaController, :sample_object
+    get "/objects/:extension/:id", SchemaController, :sample_object
     get "/classes/:id", SchemaController, :sample_class
+    get "/classes/:extension/:id", SchemaController, :sample_class
   end
 
   scope "/doc" do

@@ -8,6 +8,10 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+TODO: scoped - support extension scoped names
+TODO: scoped - show extension names - cross reference shadowed names
+
 --%>
 <div class="row">
   <div class="col-md move-up">
@@ -39,7 +43,7 @@ limitations under the License.
     </thead>
     <tbody class="searchable">
       <%= for {name, map} <- @data do %>
-        <% path = Routes.static_path(@conn, "/profiles/" <> name) %>
+        <% path = Routes.static_path(@conn, "/profiles/#{name}") %>
         <tr>
           <td class="name"><a href="<%= path %>"><%= name %></a></td>
           <td><%= raw format_caption(name, map) %></td>
