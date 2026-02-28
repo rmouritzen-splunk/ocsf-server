@@ -22,18 +22,22 @@ limitations under the License.
     <% path = Routes.static_path(@conn, "/categories/" <> category) %>
     <h3 class="extensions">
       <%= @data[:caption] %>
-      <span class="text-secondary">[<a href="<%= class_graph_path(@conn, @data)  %>"><%= @data[:uid] %></a>]<%= if extension && extension != "" do %><span class="extension-badge"> <%= extension %></span><% end %>
-        Class
-      </span>
-      <%= if @data[:_patched_by_extensions] do %>
+      <span class="text-secondary">
         <span class="small">
-        <%= if Enum.count(@data[:_patched_by_extensions]) == 1 do %>
-            patched by <%= Enum.at(@data[:_patched_by_extensions], 0) %> extension
-        <% else %>
-            patched by extensions: <%= Enum.intersperse(@data[:_patched_by_extensions], ", ") %>
-        <% end %>
+          [<a href="<%= class_graph_path(@conn, @data)  %>"><%= @data[:uid] %></a>]
+          <%= if extension && extension != "" do %><span class="extension-badge"> <%= extension %></span><% end %>
         </span>
-      <% end %>
+        Class
+        <%= if @data[:_patched_by_extensions] do %>
+          <span class="small">
+          <%= if Enum.count(@data[:_patched_by_extensions]) == 1 do %>
+              patched by <%= Enum.at(@data[:_patched_by_extensions], 0) %> extension
+          <% else %>
+              patched by extensions: <%= Enum.intersperse(@data[:_patched_by_extensions], ", ") %>
+          <% end %>
+          </span>
+        <% end %>
+      </span>
       <%= raw profile_badges(@conn, @data, @profiles) %>
     </h3>
 

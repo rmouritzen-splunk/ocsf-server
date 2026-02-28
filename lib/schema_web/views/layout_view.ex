@@ -34,7 +34,7 @@ defmodule SchemaWeb.LayoutView do
   @spec format_profile_postfix(map()) :: String.t()
   def format_profile_postfix(profile) do
     if profile[:extension] != nil and profile[:extension] != "" do
-      "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{profile[:extension]} extension'><i class='fas fa-layer-group'></i></sup>"
+      "<sup class='source-indicator-small extension-indicator' data-toggle='tooltip' title='From #{profile[:extension]} extension'><i class='fas fa-layer-group'></i></sup>"
     else
       ""
     end

@@ -514,9 +514,8 @@ defmodule SchemaWeb.SchemaController do
     response(404, "Event class <code>name</code> not found")
   end
 
-  # TODO: scoped - Transform attributes.<name>.profiles to profile
-  #                Fail if profiles hold more than 1 profile
-  #                Add v2 API
+  # NOTE: This API returns a class with "profiles" in attribute details.
+  #       The output is not exactly the same as returned by the v3 server.
   @spec class_by_id(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def class_by_id(conn, params) do
     class(conn, params_to_uid(params), params)
@@ -611,9 +610,8 @@ defmodule SchemaWeb.SchemaController do
     response(404, "Object <code>name</code> not found")
   end
 
-  # TODO: scoped - Transform attributes.<name>.profiles to profile
-  #                Fail if profiles hold more than 1 profile
-  #                Add v2 API
+  # NOTE: This API returns an object with "profiles" in attribute details.
+  #       The output is not exactly the same as returned by the v3 server.
   @spec object_by_id(Plug.Conn.t(), map) :: Plug.Conn.t()
   def object_by_id(conn, params) do
     id = params_to_uid(params)

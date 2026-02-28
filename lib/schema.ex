@@ -16,8 +16,6 @@ defmodule Schema do
   if it comes from the database, an external API or others.
   """
 
-  # TODO: scoped - support extension scoped names
-
   alias Schema.SingleRepo
   alias Schema.Utils
   require Logger
@@ -168,17 +166,18 @@ defmodule Schema do
 
   @doc """
   Returns the attribute dictionary including the extension.
+  Used for the dictionary attributes page.
   """
-  @spec dictionary_filter_extensions(Utils.string_set_t()) :: Utils.dictionary_t()
-  def dictionary_filter_extensions(extensions) do
-    SingleRepo.dictionary()
+  @spec dictionary_filter_extensions(Utils.string_set_t(), map()) :: Utils.dictionary_t()
+  def dictionary_filter_extensions(extensions, schema) do
+    schema[:dictionary]
     |> Map.update!(:attributes, fn attributes ->
       Utils.filter_items_by_extensions(attributes, extensions)
     end)
   end
 
   @doc """
-  Returns the attribute dictionary including the extension, without browser infomation.
+  Returns the attribute dictionary including the extension, without browser information.
   """
   @spec clean_dictionary_filter_extensions(Utils.string_set_t()) :: Utils.dictionary_t()
   def clean_dictionary_filter_extensions(extensions) do
@@ -264,7 +263,7 @@ defmodule Schema do
   """
   @spec class(atom() | String.t()) :: nil | Utils.class_t()
   def class(id) do
-    SingleRepo.classes()[Utils.to_uid(id)]
+    SingleRepo.clean_classes()[Utils.to_uid(id)]
   end
 
   @doc """
@@ -321,7 +320,7 @@ defmodule Schema do
   """
   @spec find_class(integer()) :: nil | Utils.class_t()
   def find_class(uid) when is_integer(uid) do
-    case Enum.find(SingleRepo.classes(), fn {_, class} -> class[:uid] == uid end) do
+    case Enum.find(SingleRepo.clean_classes(), fn {_, class} -> class[:uid] == uid end) do
       {_, class} -> class
       nil -> nil
     end
@@ -342,7 +341,7 @@ defmodule Schema do
   """
   @spec object(atom | String.t()) :: nil | Utils.object_t()
   def object(id) do
-    SingleRepo.objects()[Utils.to_uid(id)]
+    SingleRepo.clean_objects()[Utils.to_uid(id)]
   end
 
   @spec object_filter_extensions(

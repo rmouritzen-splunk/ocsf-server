@@ -12,8 +12,6 @@ defmodule Schema.Validator do
   OCSF Event validator.
   """
 
-  # TODO: scoped - support extension scoped names
-
   require Logger
 
   alias Schema.Utils

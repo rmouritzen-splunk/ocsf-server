@@ -1,18 +1,4 @@
 defmodule SchemaWeb.PageView do
-  # TODO: scoped - support extension scoped names
-  # TODO: scoped - show extension annotation for category on classes and class pages
-  # TODO: scoped - show extension annotation for object types
-  #                on class, object, profile, and dictionary attributes pages
-  # TODO: scoped - show extension annotation for data types
-  #                on class, object, profile, dictionary attributes, and data types pages
-  # TODO: scoped - annotate extension shadowed names; applies to the following extension items:
-  #                - category names
-  #                - class names
-  #                - object names / object type names
-  #                - dictionary attribute names
-  #                - dictionary type names (data type names)
-  #                - profile names
-
   use SchemaWeb, :view
 
   alias Schema.Utils
@@ -70,47 +56,41 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  def class_profiles(conn, class, profiles) do
-    case class[:profiles] || [] do
+  def profile_badges(conn, item, profiles) do
+    case item[:profiles] || [] do
       [] ->
         ""
 
-      list ->
-        [
-          "<h5 class='mt-3'>Profiles</h5>",
-          "Applicable profiles: ",
-          Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
-          |> Enum.map_join(", ", fn name ->
-            profile_link(conn, get_in(profiles, [name, :caption]), name)
-          end),
-          "."
-        ]
-    end
-  end
-
-  def profile_badges(conn, class, profiles) do
-    case class[:profiles] || [] do
-      [] ->
-        ""
-
-      list ->
+      profile_names ->
         applicable_profiles =
-          Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
+          Stream.filter(
+            profile_names,
+            fn profile_name -> Map.has_key?(profiles, Utils.to_uid(profile_name)) end
+          )
 
         if Enum.empty?(applicable_profiles) do
           ""
         else
           badges =
-            Enum.map(applicable_profiles, fn name ->
-              caption = get_in(profiles, [name, :caption]) || name
-              path = Routes.static_path(conn, "/profiles/" <> name)
+            Enum.map(applicable_profiles, fn profile_name ->
+              profile = profiles[Utils.to_uid(profile_name)]
+              path = Routes.static_path(conn, "/profiles/" <> profile_name)
+              caption = profile[:caption] || profile_name
+              extension = profile[:extension]
+
+              title =
+                if extension && extension != "" do
+                  "#{caption} from #{extension} extension"
+                else
+                  caption
+                end
 
               [
                 "<span class='profile-badge'>",
                 "<a href='",
                 path,
                 "' title='Profile: ",
-                caption,
+                title,
                 "'>",
                 "<i class='fas fa-tag'></i> ",
                 caption,
@@ -129,13 +109,16 @@ defmodule SchemaWeb.PageView do
   end
 
   @spec get_applicable_profiles(map(), map()) :: list()
-  def get_applicable_profiles(data, profiles) do
-    case data[:profiles] || [] do
+  def get_applicable_profiles(item, profiles) do
+    case item[:profiles] || [] do
       [] ->
         []
 
-      list ->
-        Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
+      profile_names ->
+        Stream.filter(
+          profile_names,
+          fn profile_name -> Map.has_key?(profiles, Utils.to_uid(profile_name)) end
+        )
         |> Enum.to_list()
     end
   end
@@ -152,15 +135,6 @@ defmodule SchemaWeb.PageView do
         |> Enum.join(",")
         |> (fn str -> "[#{str}]" end).()
     end
-  end
-
-  defp profile_link(_conn, nil, name) do
-    name
-  end
-
-  defp profile_link(conn, caption, name) do
-    path = Routes.static_path(conn, "/profiles/" <> name)
-    "<a href='#{path}'>#{caption}</a>"
   end
 
   def format_profiles(nil) do
@@ -583,8 +557,15 @@ defmodule SchemaWeb.PageView do
     r == "recommended"
   end
 
-  def format_constraints(:string_t, field) do
-    format_string_constraints(field)
+  def format_constraints(:boolean_t, field) do
+    case Map.get(field, :values) do
+      nil -> ""
+      values -> format_values(values)
+    end
+  end
+
+  def format_constraints(:float_t, _field) do
+    ""
   end
 
   def format_constraints(:integer_t, field) do
@@ -595,32 +576,37 @@ defmodule SchemaWeb.PageView do
     format_integer_constraints(field)
   end
 
-  def format_constraints("string_t", field) do
+  def format_constraints(:string_t, field) do
     format_string_constraints(field)
   end
 
-  def format_constraints("integer_t", field) do
-    format_integer_constraints(field)
-  end
-
-  def format_constraints("long_t", field) do
-    format_integer_constraints(field)
-  end
-
-  def format_constraints(:boolean_t, field) do
-    case Map.get(field, :values) do
-      nil -> ""
-      values -> format_values(values)
-    end
-  end
-
-  def format_constraints(nil, field) do
-    format_max_len(field)
-  end
-
-  # format data type constraints: values, range, regex, and max_len
+  # format potential subtypes
   def format_constraints(_type, field) do
-    format_constraints(Map.get(field, :type), field)
+    format_subtype_constraints(field[:type], field)
+  end
+
+  def format_subtype_constraints("boolean_t", _field) do
+    ""
+  end
+
+  def format_subtype_constraints("float_t", _field) do
+    ""
+  end
+
+  def format_subtype_constraints("integer_t", field) do
+    format_integer_constraints(field)
+  end
+
+  def format_subtype_constraints("long_t", field) do
+    format_integer_constraints(field)
+  end
+
+  def format_subtype_constraints("string_t", field) do
+    format_string_constraints(field)
+  end
+
+  def format_subtype_constraints(_type, _field) do
+    ""
   end
 
   defp format_integer_constraints(field) do

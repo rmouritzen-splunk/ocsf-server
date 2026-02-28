@@ -274,6 +274,13 @@ sup.bg-warning {
   transition: var(--transition-fast);
 }
 
+.source-indicator-small {
+  font-size: 0.6125rem;
+  margin-left: 3px;
+  cursor: help;
+  transition: var(--transition-fast);
+}
+
 .extension-indicator {
   color: var(--primary-color);
 }

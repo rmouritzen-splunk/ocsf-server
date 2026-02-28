@@ -190,15 +190,16 @@ defmodule SchemaWeb.PageController do
 
   @spec dictionary(Plug.Conn.t(), any) :: Plug.Conn.t()
   def dictionary(conn, params) do
-    # TODO: scoped - get schema once
+    schema = Schema.schema()
+
     data =
       SchemaController.parse_options(SchemaController.extensions(params))
-      |> Schema.dictionary_filter_extensions()
-      |> sort_attributes_by_key()
+      |> Schema.dictionary_filter_extensions(schema)
+      |> sort_attributes_by_descoped_key()
 
     render(conn, "dictionary.html",
-      schema: Schema.schema(),
-      extensions: Schema.extensions(),
+      schema: schema,
+      extensions: schema[:extensions],
       profiles: get_profiles(params),
       data: data
     )
@@ -206,7 +207,7 @@ defmodule SchemaWeb.PageController do
 
   @spec data_types(Plug.Conn.t(), any) :: Plug.Conn.t()
   def data_types(conn, params) do
-    data = Schema.data_types() |> sort_attributes_by_key()
+    data = Schema.data_types() |> sort_attributes_by_descoped_key()
 
     render(conn, "data_types.html",
       schema: Schema.schema(),
@@ -236,6 +237,10 @@ defmodule SchemaWeb.PageController do
     Map.update!(map, :attributes, &sort_by_key/1)
   end
 
+  defp sort_attributes_by_descoped_key(map) do
+    Map.update!(map, :attributes, &sort_by_descoped_key/1)
+  end
+
   defp sort_by_key(map) do
     Enum.sort(map, fn {k1, _}, {k2, _} ->
       Atom.to_string(k1) <= Atom.to_string(k2)
@@ -243,8 +248,20 @@ defmodule SchemaWeb.PageController do
   end
 
   defp sort_by_descoped_key(map) do
-    Enum.sort(map, fn {k1, _}, {k2, _} ->
-      Schema.Utils.descope(k1) <= Schema.Utils.descope(k2)
+    Enum.sort(map, fn {k1, v1}, {k2, v2} ->
+      descoped_k1 = Schema.Utils.descope(k1)
+      descoped_k2 = Schema.Utils.descope(k2)
+
+      cond do
+        descoped_k1 < descoped_k2 ->
+          true
+
+        descoped_k1 == descoped_k2 ->
+          v1[:extension] <= v2[:extension]
+
+        true ->
+          false
+      end
     end)
   end
 
