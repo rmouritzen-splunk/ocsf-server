@@ -202,18 +202,10 @@ defmodule Schema.Utils do
     attributes
   end
 
-  defp filter_attributes_by_profiles_sized(attributes, _profiles, 0) do
-    remove_profiles(attributes)
-  end
-
   defp filter_attributes_by_profiles_sized(attributes, profiles, _size) do
     Enum.filter(attributes, fn {_k, a} ->
       a[:profiles] == nil || Enum.any?(a[:profiles], fn ap -> MapSet.member?(profiles, ap) end)
     end)
-  end
-
-  def remove_profiles(attributes) do
-    Enum.filter(attributes, fn {_k, v} -> Map.has_key?(v, :profiles) == false end)
   end
 
   @version_regex ~r/^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>.+))?$/
