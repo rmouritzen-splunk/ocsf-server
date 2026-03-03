@@ -154,7 +154,7 @@ defmodule SchemaWeb.PageController do
   def object_by_id(conn, params) do
     schema = Schema.schema()
     id = SchemaController.params_to_uid(params)
-    profiles = SchemaController.parse_options(SchemaController.profiles(params))
+    profiles = parse_profiles_from_params(params)
     extensions = SchemaController.parse_options(SchemaController.extensions(params))
 
     case Schema.object_filter_extensions_profiles(schema, id, extensions, profiles) do
@@ -265,20 +265,24 @@ defmodule SchemaWeb.PageController do
     end)
   end
 
+  @spec parse_profiles_from_params(map()) :: Schema.Utils.string_set_t()
   defp parse_profiles_from_params(params) do
-    case params["profiles"] do
-      nil ->
-        nil
+    profiles = params["profiles"]
 
-      "" ->
-        MapSet.new()
-
-      profiles_string ->
-        profiles_string
-        |> String.split(",")
-        |> Enum.map(&String.trim/1)
-        |> MapSet.new()
+    if is_binary(profiles) && String.length(profiles) > 0 do
+      profiles
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+      |> MapSet.new()
+    else
+      MapSet.new(empty_string_list())
     end
+  end
+
+  # empty_string_list only exists to satisfy the success typing of parse_profiles_from_params.
+  @spec empty_string_list() :: [String.t()]
+  defp empty_string_list() do
+    []
   end
 
   @doc """

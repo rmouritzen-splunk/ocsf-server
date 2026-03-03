@@ -1438,7 +1438,7 @@ defmodule SchemaWeb.SchemaController do
   end
 
   @spec profiles(map()) :: nil | String.t()
-  def profiles(params) do
+  defp profiles(params) do
     params["profiles"]
   end
 
