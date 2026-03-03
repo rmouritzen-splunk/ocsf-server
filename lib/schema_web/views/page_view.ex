@@ -542,6 +542,8 @@ defmodule SchemaWeb.PageView do
     #   end
     #
     # Until we have time to untangle this mess, we can simply use the no-profile CSS class.
+    # TODO: Cleanup profiles and CSS class interaction. Note that we cannot simply remove all of
+    #       this logic as it is used with the extension checkboxes and reloading page on click.
     css_classes = css_classes <> " no-profile"
 
     show_deprecated_css_classes(field, css_classes)
