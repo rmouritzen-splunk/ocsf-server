@@ -8,8 +8,7 @@ config :schema_server, SchemaWeb.Endpoint,
 
 # Configure the logger to write to a file in test mode
 config :logger,
-  level: :warning,
-  backends: [{LoggerFileBackend, :test_log}]
+  level: :warning
 
 config :logger, :test_log,
   path: "log/test_#{System.system_time(:millisecond)}.log",
