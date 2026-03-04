@@ -144,7 +144,7 @@ defmodule Schema.Utils do
   Filter attributes in items based on the given profiles.
   """
   @spec filter_items_attributes_by_profiles(
-          map() | nil,
+          map() | list() | nil,
           nil | list(String.t()) | string_set_t()
         ) :: map() | nil
   def filter_items_attributes_by_profiles(nil, _profiles) do
@@ -191,18 +191,19 @@ defmodule Schema.Utils do
 
   def filter_attributes_by_profiles(attributes, profiles) when is_list(profiles) do
     profiles = MapSet.new(profiles)
-    filter_attributes_by_profiles_sized(attributes, profiles, MapSet.size(profiles))
+    filter_attributes_by_profiles_set(attributes, profiles)
   end
 
   def filter_attributes_by_profiles(attributes, %MapSet{} = profiles) do
-    filter_attributes_by_profiles_sized(attributes, profiles, MapSet.size(profiles))
+    filter_attributes_by_profiles_set(attributes, profiles)
   end
 
   def filter_attributes_by_profiles(attributes, _profiles) do
     attributes
   end
 
-  defp filter_attributes_by_profiles_sized(attributes, profiles, _size) do
+  @spec filter_attributes_by_profiles_set(Enum.t(), string_set_t()) :: Enum.t()
+  defp filter_attributes_by_profiles_set(attributes, profiles) do
     Enum.filter(attributes, fn {_k, a} ->
       a[:profiles] == nil || Enum.any?(a[:profiles], fn ap -> MapSet.member?(profiles, ap) end)
     end)

@@ -421,7 +421,7 @@ defmodule Schema do
           Utils.string_set_t() | nil
         ) :: nil | map()
   def class_with_referenced_objects_filter_profiles(id, profiles) do
-    schema = SingleRepo.schema()
+    schema = SingleRepo.clean_schema()
     objects = schema[:objects]
 
     case schema[:classes][id] do
@@ -430,8 +430,12 @@ defmodule Schema do
 
       class ->
         class
-        |> Map.put(:objects, referenced_objects(class, objects))
         |> Utils.filter_item_attributes_by_profiles(profiles)
+        |> Map.put(
+          :objects,
+          referenced_objects(class, objects)
+          |> Utils.filter_items_attributes_by_profiles(profiles)
+        )
     end
   end
 
@@ -449,7 +453,7 @@ defmodule Schema do
         extensions,
         profiles
       ) do
-    schema = SingleRepo.schema()
+    schema = SingleRepo.clean_schema()
     objects = schema[:objects]
 
     case schema[:objects][id] do
