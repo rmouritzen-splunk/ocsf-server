@@ -39,11 +39,11 @@ defmodule Schema.JsonSchema do
 
     {properties, required, just_one, at_least_one} = map_reduce(name, item, data_types)
 
-    if Map.has_key?(item, :_links) do
+    if Map.has_key?(item, :uid) do
+      class_schema(make_class_ref(name))
+    else
       Map.new()
       |> add_java_class(name)
-    else
-      class_schema(make_class_ref(name))
     end
     |> Map.put("title", item[:caption])
     |> Map.put("type", "object")
@@ -166,33 +166,36 @@ defmodule Schema.JsonSchema do
 
   defp map_reduce(type_name, type, data_types) do
     {properties, {required, just_one, at_least_one}} =
-      Enum.map_reduce(type[:attributes], {[], [], []}, fn {key, attribute},
-                                                          {required, just_one, at_least_one} ->
-        name = Atom.to_string(key)
-        just_one_list = List.wrap(type[:constraints][:just_one])
-        at_least_one_list = List.wrap(type[:constraints][:at_least_one])
+      Enum.map_reduce(
+        Enum.sort_by(type[:attributes], fn {k, _} -> k end, :desc),
+        {[], [], []},
+        fn {key, attribute}, {required, just_one, at_least_one} ->
+          name = Atom.to_string(key)
+          just_one_list = List.wrap(type[:constraints][:just_one])
+          at_least_one_list = List.wrap(type[:constraints][:at_least_one])
 
-        cond do
-          name in just_one_list ->
-            {required, [name | just_one], at_least_one}
+          cond do
+            name in Enum.sort(just_one_list) ->
+              {required, [name | just_one], at_least_one}
 
-          name in at_least_one_list ->
-            {required, just_one, [name | at_least_one]}
+            name in Enum.sort(at_least_one_list) ->
+              {required, just_one, [name | at_least_one]}
 
-          attribute[:requirement] == "required" ->
-            {[name | required], just_one, at_least_one}
+            attribute[:requirement] == "required" ->
+              {[name | required], just_one, at_least_one}
 
-          true ->
-            {required, just_one, at_least_one}
+            true ->
+              {required, just_one, at_least_one}
+          end
+          |> (fn {required, just_one, at_least_one} ->
+                schema =
+                  encode_attribute(type_name, attribute[:type], attribute, data_types)
+                  |> encode_array(attribute[:is_array])
+
+                {{name, schema}, {required, just_one, at_least_one}}
+              end).()
         end
-        |> (fn {required, just_one, at_least_one} ->
-              schema =
-                encode_attribute(type_name, attribute[:type], attribute, data_types)
-                |> encode_array(attribute[:is_array])
-
-              {{name, schema}, {required, just_one, at_least_one}}
-            end).()
-      end)
+      )
 
     {Map.new(properties), required, just_one, at_least_one}
   end
@@ -264,9 +267,12 @@ defmodule Schema.JsonSchema do
   end
 
   defp encode_enum_values(enum, encoder) do
-    Enum.map(enum, fn {name, _} ->
-      encoder.(name)
+    enum
+    |> Map.keys()
+    |> Enum.map(fn k ->
+      encoder.(k)
     end)
+    |> Enum.sort()
   end
 
   defp encode_array(schema, true) do
