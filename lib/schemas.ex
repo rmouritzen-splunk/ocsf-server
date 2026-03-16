@@ -12,6 +12,14 @@ defmodule Schemas do
   This module provides function to work with multiple schema versions.
   """
 
+  # NOTE: The this version of the server runs alongside v3 servers.
+  #       We need to maintain cross compatibility.
+  #       Each version of the schema must reside in its down directory and must contain a
+  #       version.json file. For compiled schemas created with the ocsf-schema-compiler,
+  #       this means a version.json should be created, as the compiled schema is quite large.
+  #       For example:
+  #       cat "${compiled_dir}"/schema.json | jq '{version}' > "${compiled_dir}"/version.json
+
   use Agent
 
   require Logger

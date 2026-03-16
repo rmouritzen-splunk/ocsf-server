@@ -189,6 +189,7 @@ limitations under the License.
       </div>
 
       <%= if map_size(@profiles) > 0 do %>
+      <% sorted_profiles = sort_profiles(@profiles) %>
       <!-- Profiles Section -->
       <div class="sidebar-section">
         <a id="profiles-link" class="sidebar-section-header" href='<%= Routes.static_path(@conn, "/profiles") %>'>
@@ -197,12 +198,13 @@ limitations under the License.
         </a>
         <div class="sidebar-section-content" id="profiles-list">
           <ul class="sidebar-nav">
-            <%= for {name, map} <- @profiles do %>
-            <li class="sidebar-nav-item profile-item" data-profile-name="<%= name %>"
-                data-toggle="tooltip" title='<%= raw format_profile(map) %>'>
+            <%= for {profile_name, profile} <- sorted_profiles do %>
+            <% profile_name = to_string(profile_name) %>
+            <li class="sidebar-nav-item profile-item" data-profile-name="<%= profile_name %>">
               <label>
-                <input type="checkbox" data-profile="<%= name %>" id="<%= String.replace(name, "/", "-") %>">
-                <%= map[:caption] %>
+                <input type="checkbox" data-profile="<%= profile_name %>" id="<%= String.replace(profile_name, "/", "-") %>">
+                <span data-toggle="tooltip" title="<%= raw format_profile(profile) %>"><%= profile[:caption] %></span>
+                <%= raw format_profile_postfix(profile) %>
               </label>
             </li>
             <% end %>
@@ -286,7 +288,7 @@ limitations under the License.
 </div>
 
 <div class="footer">
-  OCSF Server version <%= Schema.build_version() %>.
+  OCSF Server version <%= Schema.server_version() %>.
   Copyright &copy; OCSF a Series of LF Projects, LLC.
   For web site terms of use, trademark policy and other project policies please see <a href="https://lfprojects.org">LF Projects, LLC</a>.
   This content includes the ICD Schema developed by Symantec, a division of Broadcom.

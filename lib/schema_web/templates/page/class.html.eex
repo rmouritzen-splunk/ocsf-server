@@ -22,8 +22,21 @@ limitations under the License.
     <% path = Routes.static_path(@conn, "/categories/" <> category) %>
     <h3 class="extensions">
       <%= @data[:caption] %>
-      <span class="text-secondary">[<a href="<%= class_graph_path(@conn, @data)  %>"><%= @data[:uid] %></a>]<%= if extension && extension != "" do %><span class="extension-badge"><%= extension %></span><% end %>
+      <span class="text-secondary">
+        <span class="small">
+          [<a href="<%= class_graph_path(@conn, @data)  %>"><%= @data[:uid] %></a>]
+          <%= if extension && extension != "" do %><span class="extension-badge"> <%= extension %></span><% end %>
+        </span>
         Class
+        <%= if @data[:_patched_by_extensions] do %>
+          <span class="small">
+          <%= if Enum.count(@data[:_patched_by_extensions]) == 1 do %>
+              patched by <%= Enum.at(@data[:_patched_by_extensions], 0) %> extension
+          <% else %>
+              patched by extensions: <%= Enum.intersperse(@data[:_patched_by_extensions], ", ") %>
+          <% end %>
+          </span>
+        <% end %>
       </span>
       <%= raw profile_badges(@conn, @data, @profiles) %>
     </h3>
@@ -90,8 +103,8 @@ limitations under the License.
     <tbody class="searchable">
       <%= for {attribute_key, attribute} <- @data[:attributes] do %>
         <tr class="<%= field_classes(attribute) %>">
-          <td class="name" data-toggle="tooltip" title="<%= format_class_attribute_source(@data[:attribute_key], attribute) %>"><%= format_attribute_name(attribute_key) %></td>
-          <td><%= raw format_attribute_caption(@conn, attribute_key, attribute) %></td>
+          <td class="name" data-toggle="tooltip" title="<%= format_class_attribute_source(@schema, @data[:name], attribute) %>"><%= format_attribute_name(attribute_key) %></td>
+          <td><%= raw format_attribute_caption(@conn, @schema, attribute_key, attribute) %></td>
           <td class="capitalize"><%= attribute[:group] %></td>
           <td><%= raw format_requirement(constraints, attribute_key, attribute) %></td>
           <td class="extensions"><%= raw format_type(@conn, attribute) %></td>

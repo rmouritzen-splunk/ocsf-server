@@ -1,13 +1,13 @@
 <%!--
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+  http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 --%>
 
 <% references = @data[:references] %>
@@ -17,25 +17,30 @@
   <div class="col-md move-up">
     <h3 class="extensions">
       <a href="<%= object_graph_path(@conn, @data)  %>"><%= @data[:caption] %></a>
-      <% observable = @data[:observable] %>
-      <%= if is_nil(observable) do %>
-        <span class="small"><%= if @data[:extension] && @data[:extension] != "" do %><span class="extension-badge"><%= @data[:extension] %></span><% end %>
-          Object
+      <span class="text-secondary">
+        <span class="small">
+          <%= if @data[:extension] && @data[:extension] != "" do %><span class="extension-badge"><%= @data[:extension] %></span><% end %>
+          <% observable = @data[:observable] %>
+          <%= if not is_nil(observable) do %>
+            <span data-toggle="tooltip" title="Observable Type ID <%= observable %>">[<%= observable %>]</span>
+          <% end %>
         </span>
-      <% else %>
-        <span class="small"><%= if @data[:extension] && @data[:extension] != "" do %><span class="extension-badge"><%= @data[:extension] %></span><% end %>
-          <span data-toggle="tooltip" title="Observable Type ID <%= observable %>">[<%= observable %>]</span> object
-        </span>
-      <% end %>
-      <% extends = @data[:extends] || "object" %>
-      <span class="small">
-        <%= if extends != "object" and not String.starts_with?(extends, "_") do %>
-          <span>
+        Object
+        <% extends = @data[:extends] || "object" %>
+        <span class="small">
+          <%= if extends != "object" and not String.starts_with?(extends, "_") do %>
             extends <a href="<%= Routes.static_path(@conn, "/objects/" <> extends) %>"><%= extends %></a>
-          </span>
-        <% end %>
+          <% end %>
+          <%= if @data[:_patched_by_extensions] do %>
+            <%= if Enum.count(@data[:_patched_by_extensions]) == 1 do %>
+                patched by <%= Enum.at(@data[:_patched_by_extensions], 0) %> extension
+            <% else %>
+                patched by extensions: <%= Enum.intersperse(@data[:_patched_by_extensions], ", ") %>
+            <% end %>
+          <% end %>
+        </span>
+        <%= raw profile_badges(@conn, @data, @profiles) %>
       </span>
-      <%= raw profile_badges(@conn, @data, @profiles) %>
     </h3>
 
     <div class="text-secondary description-content">
@@ -79,8 +84,8 @@
     <tbody class="searchable">
       <%= for {attribute_key, attribute} <- @data[:attributes] do %>
       <tr class="<%= field_classes(attribute)%>">
-        <td class="name" data-toggle="tooltip" title="<%= format_object_attribute_source(@data[:attribute_key], attribute) %>"><%= format_attribute_name(attribute_key) %></td>
-        <td><%= raw format_attribute_caption(@conn, attribute_key, attribute) %></td>
+        <td class="name" data-toggle="tooltip" title="<%= format_object_attribute_source(@schema, @data[:name], attribute) %>"><%= format_attribute_name(attribute_key) %></td>
+        <td><%= raw format_attribute_caption(@conn, @schema, attribute_key, attribute) %></td>
         <td><%= raw format_requirement(constraints, attribute_key, attribute) %></td>
         <td class="extensions"><%= raw format_type(@conn, attribute) %></td>
         <td><%= raw format_attribute_desc(attribute_key, attribute) %></td>

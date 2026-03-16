@@ -21,7 +21,7 @@ defmodule Schema.Validator2 do
 
   @spec validate(map(), boolean()) :: map()
   def validate(data, warn_on_missing_recommended) when is_map(data) do
-    validate_event(data, warn_on_missing_recommended, Schema.dictionary())
+    validate_event(Schema.clean_schema(), data, warn_on_missing_recommended)
   end
 
   @spec validate_bundle(map(), boolean()) :: map()
@@ -61,7 +61,7 @@ defmodule Schema.Validator2 do
 
     # Next validate the events in the bundle
     response =
-      validate_bundle_events(response, bundle, warn_on_missing_recommended, Schema.dictionary())
+      validate_bundle_events(response, Schema.clean_schema(), bundle, warn_on_missing_recommended)
 
     finalize_response(response)
   end
@@ -103,8 +103,8 @@ defmodule Schema.Validator2 do
     end
   end
 
-  @spec validate_bundle_events(map(), map(), boolean(), map()) :: map()
-  defp validate_bundle_events(response, bundle, warn_on_missing_recommended, dictionary) do
+  @spec validate_bundle_events(map(), map(), map(), boolean()) :: map()
+  defp validate_bundle_events(response, schema, bundle, warn_on_missing_recommended) do
     events = bundle["events"]
 
     if is_list(events) do
@@ -115,7 +115,7 @@ defmodule Schema.Validator2 do
           events,
           fn event ->
             if is_map(event) do
-              validate_event(event, warn_on_missing_recommended, dictionary)
+              validate_event(schema, event, warn_on_missing_recommended)
             else
               {type, type_extra} = type_of(event)
 
@@ -133,23 +133,23 @@ defmodule Schema.Validator2 do
     end
   end
 
-  @spec validate_event(map(), boolean(), map()) :: map()
-  defp validate_event(event, warn_on_missing_recommended, dictionary) do
+  @spec validate_event(map(), map(), boolean()) :: map()
+  defp validate_event(schema, event, warn_on_missing_recommended) do
     response = new_response(event)
 
-    {response, class} = validate_class_uid_and_return_class(response, event)
+    {response, class} = validate_class_uid_and_return_class(response, schema, event)
 
     response =
       if class do
-        {response, profiles} = validate_and_return_profiles(response, event)
+        {response, profiles} = validate_and_return_profiles(response, schema, event)
 
         validate_event_against_class(
           response,
+          schema,
           event,
           class,
           profiles,
-          warn_on_missing_recommended,
-          dictionary
+          warn_on_missing_recommended
         )
       else
         # Can't continue if we can't find the class
@@ -159,14 +159,14 @@ defmodule Schema.Validator2 do
     finalize_response(response)
   end
 
-  @spec validate_class_uid_and_return_class(map(), map()) :: {map(), nil | map()}
-  defp validate_class_uid_and_return_class(response, event) do
+  @spec validate_class_uid_and_return_class(map(), map(), map()) :: {map(), nil | map()}
+  defp validate_class_uid_and_return_class(response, schema, event) do
     if Map.has_key?(event, "class_uid") do
       class_uid = event["class_uid"]
 
       cond do
         is_integer_t(class_uid) ->
-          case Schema.find_class(class_uid) do
+          case find_class(schema, class_uid) do
             nil ->
               {
                 add_error(
@@ -184,7 +184,8 @@ defmodule Schema.Validator2 do
 
         true ->
           {
-            # We need to add error here; no further validation will occur (nil returned for class).
+            # We need to add error here;
+            # no further validation will occur (nil returned for class).
             add_error_wrong_type(response, "class_uid", "class_uid", class_uid, "integer_t"),
             nil
           }
@@ -195,8 +196,16 @@ defmodule Schema.Validator2 do
     end
   end
 
-  @spec validate_and_return_profiles(map(), map()) :: {map(), list(String.t())}
-  defp validate_and_return_profiles(response, event) do
+  @spec find_class(map(), integer()) :: nil | Schema.Utils.class_t()
+  defp find_class(schema, uid) when is_integer(uid) do
+    case Enum.find(schema[:classes], fn {_, class} -> class[:uid] == uid end) do
+      {_, class} -> class
+      nil -> nil
+    end
+  end
+
+  @spec validate_and_return_profiles(map(), map(), map()) :: {map(), list(String.t())}
+  defp validate_and_return_profiles(response, schema, event) do
     metadata = event["metadata"]
 
     if is_map(metadata) do
@@ -205,7 +214,8 @@ defmodule Schema.Validator2 do
       cond do
         is_list(profiles) ->
           # Ensure each profile is actually defined
-          schema_profiles = MapSet.new(Map.keys(Schema.profiles()))
+          schema_profiles =
+            schema[:profiles] |> Map.keys() |> Enum.map(&to_string/1) |> MapSet.new()
 
           {response, _} =
             Enum.reduce(
@@ -214,7 +224,7 @@ defmodule Schema.Validator2 do
               fn profile, {response, index} ->
                 response =
                   if is_binary(profile) and not MapSet.member?(schema_profiles, profile) do
-                    attribute_path = make_attribute_path_array_element("metadata.profile", index)
+                    attribute_path = make_attribute_path_array_element("metadata.profiles", index)
 
                     add_error(
                       response,
@@ -262,30 +272,41 @@ defmodule Schema.Validator2 do
     profile_set = MapSet.new(profiles)
 
     Enum.filter(attributes, fn {_k, v} ->
-      case v[:profile] do
-        nil -> true
-        profile -> MapSet.member?(profile_set, profile)
+      case v[:profiles] do
+        nil ->
+          true
+
+        attribute_profiles ->
+          Enum.any?(attribute_profiles, fn attribute_profile ->
+            MapSet.member?(profile_set, attribute_profile)
+          end)
       end
     end)
   end
 
-  @spec validate_event_against_class(map(), map(), map(), list(String.t()), boolean(), map()) ::
-          map()
+  @spec validate_event_against_class(
+          map(),
+          map(),
+          map(),
+          map(),
+          list(String.t()),
+          boolean()
+        ) :: map()
   defp validate_event_against_class(
          response,
+         schema,
          event,
          class,
          profiles,
-         warn_on_missing_recommended,
-         dictionary
+         warn_on_missing_recommended
        ) do
     response
     |> validate_class_deprecated(class)
-    |> validate_attributes(event, nil, class, profiles, warn_on_missing_recommended, dictionary)
-    |> validate_version(event)
+    |> validate_attributes(schema, event, nil, class, profiles, warn_on_missing_recommended)
+    |> validate_version(schema, event)
     |> validate_type_uid(event)
     |> validate_constraints(event, class)
-    |> validate_observables(event, class, profiles)
+    |> validate_observables(schema, event, class, profiles)
   end
 
   @spec validate_class_deprecated(map(), map()) :: map()
@@ -297,8 +318,8 @@ defmodule Schema.Validator2 do
     end
   end
 
-  @spec validate_version(map(), map()) :: map()
-  defp validate_version(response, event) do
+  @spec validate_version(map(), map(), map()) :: map()
+  defp validate_version(response, schema, event) do
     metadata = event["metadata"]
 
     # Only validate if we have a valid metadata object, and it has a version key
@@ -308,111 +329,63 @@ defmodule Schema.Validator2 do
       version = metadata["version"]
 
       case Schema.Utils.parse_version(version) do
-        {:error, error_message, _original} ->
-          add_error(
-            response,
-            "version_invalid_format",
-            "Event version #{inspect(version)} at \"metadata.version\" has invalid format:" <>
-              " #{error_message}." <>
-              " Version must be in semantic versioning format (see https://semver.org/).",
-            %{
-              attribute_path: "metadata.version",
-              attribute: "version",
-              value: version,
-              expected_regex: Schema.Utils.version_regex_source()
-            }
-          )
-
         parsed_version ->
-          schema_version = Schema.version()
+          schema_version = schema[:version]
+          parsed_schema_version = Schema.parsed_version()
 
-          case Schema.parsed_version() do
-            {:error, error_message, _} ->
-              # Comparing against invalid schema version - this is an OCSF schema bug
-              add_error(
-                response,
-                "server_version_invalid_format",
-                "Server's schema version #{inspect(schema_version)} has invalid format:" <>
-                  " #{error_message}." <>
-                  " Version must be in semantic versioning format (see https://semver.org/)." <>
-                  " Please fix the schema version.",
-                %{
-                  value: schema_version,
-                  expected_regex: Schema.Utils.version_regex_source()
-                }
-              )
+          cond do
+            parsed_version == parsed_schema_version ->
+              response
 
-            parsed_schema_version ->
+            Schema.Utils.version_sorter(parsed_version, parsed_schema_version) ->
+              # Event version is before the schema version (equal is covered above).
               cond do
-                parsed_version == parsed_schema_version ->
-                  response
-
-                Schema.Utils.version_sorter(parsed_version, parsed_schema_version) ->
-                  # Event version is before the schema version (equal is covered above).
-                  cond do
-                    Schema.Utils.version_is_initial_development?(parsed_version) ->
-                      # Initial development version -- versions a 0 major version like 0.1.0 -- do
-                      # not have backwards compatible guarantees.
-                      add_error(
-                        response,
-                        "version_incompatible_initial_development",
-                        "Event version \"#{version}\" at \"metadata.version\" is an initial" <>
-                          " development version and is incompatible with schema version" <>
-                          " \"#{schema_version}\". Initial development versions do not have" <>
-                          " compatibility guarantees (see https://semver.org/)." <>
-                          " This can result in incorrect validation messages.",
-                        %{
-                          attribute_path: "metadata.version",
-                          attribute: "version",
-                          value: version
-                        }
-                      )
-
-                    Schema.Utils.version_is_prerelease?(parsed_version) ->
-                      # Generally, earlier prerelease versions are incompatible with later versions.
-                      add_error(
-                        response,
-                        "version_incompatible_prerelease",
-                        "Event version \"#{version}\" at \"metadata.version\" is a prerelease" <>
-                          " version and is incompatible with schema version" <>
-                          " \"#{schema_version}\". Prerelease versions are generally" <>
-                          " incompatible with released versions and future prerelease versions" <>
-                          " (see https://semver.org/)." <>
-                          " This can result in incorrect validation messages.",
-                        %{
-                          attribute_path: "metadata.version",
-                          attribute: "version",
-                          value: version
-                        }
-                      )
-
-                    true ->
-                      # event version is simply before - this might be OK so issue warning
-                      add_warning(
-                        response,
-                        "version_earlier",
-                        "Event version \"#{version}\" at \"metadata.version\" is earlier than" <>
-                          " schema version \"#{schema_version}\"." <>
-                          " Validating against later schema versions can yield deprecation" <>
-                          " warnings and other (minor) validation messages that would not occur" <>
-                          " when validating against the same version.",
-                        %{
-                          attribute_path: "metadata.version",
-                          attribute: "version",
-                          value: version
-                        }
-                      )
-                  end
-
-                true ->
-                  # Fallback... event event version is after (later/newer) than schema version
+                Schema.Utils.version_is_initial_development?(parsed_version) ->
+                  # Initial development version -- versions a 0 major version like 0.1.0 -- do
+                  # not have backwards compatible guarantees.
                   add_error(
                     response,
-                    "version_incompatible_later",
-                    "Event version \"#{version}\" at \"metadata.version\" is incompatible with" <>
-                      " schema version \"#{schema_version}\" because it is a later version." <>
-                      " This can result in missing validation messages (false negatives)" <>
-                      " and incorrect validation messages.",
+                    "version_incompatible_initial_development",
+                    "Event version \"#{version}\" at \"metadata.version\" is an initial" <>
+                      " development version and is incompatible with schema version" <>
+                      " \"#{schema_version}\". Initial development versions do not have" <>
+                      " compatibility guarantees (see https://semver.org/)." <>
+                      " This can result in incorrect validation messages.",
+                    %{
+                      attribute_path: "metadata.version",
+                      attribute: "version",
+                      value: version
+                    }
+                  )
+
+                Schema.Utils.version_is_prerelease?(parsed_version) ->
+                  # Generally, earlier prerelease versions are incompatible with later versions.
+                  add_error(
+                    response,
+                    "version_incompatible_prerelease",
+                    "Event version \"#{version}\" at \"metadata.version\" is a prerelease" <>
+                      " version and is incompatible with schema version" <>
+                      " \"#{schema_version}\". Prerelease versions are generally" <>
+                      " incompatible with released versions and future prerelease versions" <>
+                      " (see https://semver.org/)." <>
+                      " This can result in incorrect validation messages.",
+                    %{
+                      attribute_path: "metadata.version",
+                      attribute: "version",
+                      value: version
+                    }
+                  )
+
+                true ->
+                  # event version is simply before - this might be OK so issue warning
+                  add_warning(
+                    response,
+                    "version_earlier",
+                    "Event version \"#{version}\" at \"metadata.version\" is earlier than" <>
+                      " schema version \"#{schema_version}\"." <>
+                      " Validating against later schema versions can yield deprecation" <>
+                      " warnings and other (minor) validation messages that would not occur" <>
+                      " when validating against the same version.",
                     %{
                       attribute_path: "metadata.version",
                       attribute: "version",
@@ -420,6 +393,22 @@ defmodule Schema.Validator2 do
                     }
                   )
               end
+
+            true ->
+              # Fallback... event event version is after (later/newer) than schema version
+              add_error(
+                response,
+                "version_incompatible_later",
+                "Event version \"#{version}\" at \"metadata.version\" is incompatible with" <>
+                  " schema version \"#{schema_version}\" because it is a later version." <>
+                  " This can result in missing validation messages (false negatives)" <>
+                  " and incorrect validation messages.",
+                %{
+                  attribute_path: "metadata.version",
+                  attribute: "version",
+                  value: version
+                }
+              )
           end
       end
     else
@@ -560,8 +549,8 @@ defmodule Schema.Validator2 do
     end
   end
 
-  @spec validate_observables(map(), map(), map(), list(String.t())) :: map()
-  defp validate_observables(response, event, class, profiles) do
+  @spec validate_observables(map(), map(), map(), map(), list(String.t())) :: map()
+  defp validate_observables(response, schema, event, class, profiles) do
     # TODO: There is no check of the "type_id" values. This gets slightly tricky (but possible).
 
     # TODO: There is no check to make sure the values of "name" refers to something actually in the
@@ -582,8 +571,9 @@ defmodule Schema.Validator2 do
               if is_binary(name) do
                 # Split the name but preserve array notation within each segment
                 name_parts = split_observable_name(name)
+
                 referenced_definition =
-                  get_referenced_definition(name_parts, class, profiles)
+                  get_referenced_definition(schema, name_parts, class, profiles)
 
                 if referenced_definition do
                   # At this point we could check the definition or dictionary to make sure
@@ -625,8 +615,8 @@ defmodule Schema.Validator2 do
     end
   end
 
-  @spec get_referenced_definition(list(String.t()), map(), list(String.t())) :: any()
-  defp get_referenced_definition([key | remaining_keys], schema_item, profiles) do
+  @spec get_referenced_definition(map(), list(String.t()), map(), list(String.t())) :: any()
+  defp get_referenced_definition(schema, [key | remaining_keys], schema_item, profiles) do
     schema_attributes = filter_with_profiles(schema_item[:attributes], profiles)
 
     # Handle array notation: extract base key from "key[index]" or "key[]"
@@ -647,8 +637,14 @@ defmodule Schema.Validator2 do
           nil
         else
           if attribute_details[:type] == "object_t" do
-            object_type = String.to_atom(attribute_details[:object_type])
-            get_referenced_definition(remaining_keys, Schema.object(object_type), profiles)
+            object_name = String.to_atom(attribute_details[:object_type])
+
+            get_referenced_definition(
+              schema,
+              remaining_keys,
+              schema[:objects][object_name],
+              profiles
+            )
           else
             nil
           end
@@ -692,31 +688,31 @@ defmodule Schema.Validator2 do
   @spec validate_attributes(
           map(),
           map(),
+          map(),
           nil | String.t(),
           map(),
           list(String.t()),
-          boolean(),
-          map()
+          boolean()
         ) :: map()
   defp validate_attributes(
          response,
+         schema,
          event_item,
          parent_attribute_path,
          schema_item,
          profiles,
-         warn_on_missing_recommended,
-         dictionary
+         warn_on_missing_recommended
        ) do
     schema_attributes = filter_with_profiles(schema_item[:attributes], profiles)
 
     response
     |> validate_attributes_types(
+      schema,
       event_item,
       parent_attribute_path,
       schema_attributes,
       profiles,
-      warn_on_missing_recommended,
-      dictionary
+      warn_on_missing_recommended
     )
     |> validate_attributes_unknown_keys(
       event_item,
@@ -732,20 +728,20 @@ defmodule Schema.Validator2 do
   @spec validate_attributes_types(
           map(),
           map(),
+          map(),
           nil | String.t(),
           list(tuple()),
           list(String.t()),
-          boolean(),
-          map()
+          boolean()
         ) :: map()
   defp validate_attributes_types(
          response,
+         schema,
          event_item,
          parent_attribute_path,
          schema_attributes,
          profiles,
-         warn_on_missing_recommended,
-         dictionary
+         warn_on_missing_recommended
        ) do
     Enum.reduce(
       schema_attributes,
@@ -757,13 +753,13 @@ defmodule Schema.Validator2 do
 
         validate_attribute(
           response,
+          schema,
           value,
           attribute_path,
           attribute_name,
           attribute_details,
           profiles,
-          warn_on_missing_recommended,
-          dictionary
+          warn_on_missing_recommended
         )
       end
     )
@@ -1205,23 +1201,23 @@ defmodule Schema.Validator2 do
 
   @spec validate_attribute(
           map(),
+          map(),
           any(),
           String.t(),
           String.t(),
           map(),
           list(String.t()),
-          boolean(),
-          map()
+          boolean()
         ) :: map()
   defp validate_attribute(
          response,
+         schema,
          value,
          attribute_path,
          attribute_name,
          attribute_details,
          profiles,
-         warn_on_missing_recommended,
-         dictionary
+         warn_on_missing_recommended
        ) do
     if value == nil do
       validate_requirement(
@@ -1241,31 +1237,31 @@ defmodule Schema.Validator2 do
         )
 
       # Check event_item attribute value type
-      attribute_type_key = String.to_atom(attribute_details[:type])
+      attribute_type_name = String.to_atom(attribute_details[:type])
 
-      if attribute_type_key == :object_t or
-           Map.has_key?(dictionary[:types][:attributes], attribute_type_key) do
+      if attribute_type_name == :object_t or
+           Map.has_key?(schema[:dictionary][:types][:attributes], attribute_type_name) do
         if attribute_details[:is_array] do
           validate_array(
             response,
+            schema,
             value,
             attribute_path,
             attribute_name,
             attribute_details,
             profiles,
-            warn_on_missing_recommended,
-            dictionary
+            warn_on_missing_recommended
           )
         else
           validate_value(
             response,
+            schema,
             value,
             attribute_path,
             attribute_name,
             attribute_details,
             profiles,
-            warn_on_missing_recommended,
-            dictionary
+            warn_on_missing_recommended
           )
         end
       else
@@ -1273,18 +1269,18 @@ defmodule Schema.Validator2 do
         # _could_ happen for a schema that's in development and presumably running on a
         # local / private OCSF Server instance.
         Logger.warning(
-          "SCHEMA BUG: Type \"#{attribute_type_key}\" is not defined in dictionary" <>
+          "SCHEMA BUG: Type \"#{attribute_type_name}\" is not defined in dictionary" <>
             " at attribute path \"#{attribute_path}\""
         )
 
         add_error(
           response,
           "schema_bug_type_missing",
-          "SCHEMA BUG: Type \"#{attribute_type_key}\" is not defined in dictionary.",
+          "SCHEMA BUG: Type \"#{attribute_type_name}\" is not defined in dictionary.",
           %{
             attribute_path: attribute_path,
             attribute: attribute_name,
-            type: attribute_type_key,
+            type: attribute_type_name,
             value: value
           }
         )
@@ -1318,23 +1314,23 @@ defmodule Schema.Validator2 do
   # validate an attribute whose value should be an array (is_array: true)
   @spec validate_array(
           map(),
+          map(),
           any(),
           String.t(),
           String.t(),
           map(),
           list(String.t()),
-          boolean(),
-          map()
+          boolean()
         ) :: map()
   defp validate_array(
          response,
+         schema,
          value,
          attribute_path,
          attribute_name,
          attribute_details,
          profiles,
-         warn_on_missing_recommended,
-         dictionary
+         warn_on_missing_recommended
        ) do
     if is_list(value) do
       {response, _} =
@@ -1345,13 +1341,13 @@ defmodule Schema.Validator2 do
             {
               validate_value(
                 response,
+                schema,
                 element_value,
                 make_attribute_path_array_element(attribute_path, index),
                 attribute_name,
                 attribute_details,
                 profiles,
-                warn_on_missing_recommended,
-                dictionary
+                warn_on_missing_recommended
               ),
               index + 1
             }
@@ -1373,23 +1369,23 @@ defmodule Schema.Validator2 do
   # validate a single value or element of an array (attribute with is_array: true)
   @spec validate_value(
           map(),
+          map(),
           any(),
           String.t(),
           String.t(),
           map(),
           list(String.t()),
-          boolean(),
-          map()
+          boolean()
         ) :: map()
   defp validate_value(
          response,
+         schema,
          value,
          attribute_path,
          attribute_name,
          attribute_details,
          profiles,
-         warn_on_missing_recommended,
-         dictionary
+         warn_on_missing_recommended
        ) do
     attribute_type = attribute_details[:type]
 
@@ -1397,19 +1393,19 @@ defmodule Schema.Validator2 do
       # object_t is a marker added by the schema compile to make it easy to check if attribute
       # is an OCSF object (otherwise we would need to notice that the attribute type isn't a
       # data dictionary type)
-      object_type = attribute_details[:object_type]
+      object_name = Schema.Utils.to_uid(attribute_details[:object_type])
 
       if is_map(value) do
         # Drill in to object
         validate_map_against_object(
           response,
+          schema,
           value,
           attribute_path,
           attribute_name,
-          Schema.object(object_type),
+          schema[:objects][object_name],
           profiles,
-          warn_on_missing_recommended,
-          dictionary
+          warn_on_missing_recommended
         )
       else
         add_error_wrong_type(
@@ -1417,17 +1413,17 @@ defmodule Schema.Validator2 do
           attribute_path,
           attribute_name,
           value,
-          "#{object_type} (object)"
+          "#{object_name} (object)"
         )
       end
     else
       validate_value_against_dictionary_type(
         response,
+        schema,
         value,
         attribute_path,
         attribute_name,
-        attribute_details,
-        dictionary
+        attribute_details
       )
     end
   end
@@ -1435,32 +1431,32 @@ defmodule Schema.Validator2 do
   @spec validate_map_against_object(
           map(),
           map(),
+          map(),
           String.t(),
           String.t(),
           map(),
           list(String.t()),
-          boolean(),
-          map()
+          boolean()
         ) :: map()
   defp validate_map_against_object(
          response,
+         schema,
          event_object,
          attribute_path,
          attribute_name,
          schema_object,
          profiles,
-         warn_on_missing_recommended,
-         dictionary
+         warn_on_missing_recommended
        ) do
     response
     |> validate_object_deprecated(attribute_path, attribute_name, schema_object)
     |> validate_attributes(
+      schema,
       event_object,
       attribute_path,
       schema_object,
       profiles,
-      warn_on_missing_recommended,
-      dictionary
+      warn_on_missing_recommended
     )
     |> validate_constraints(event_object, schema_object, attribute_path)
   end
@@ -1476,32 +1472,32 @@ defmodule Schema.Validator2 do
 
   @spec validate_value_against_dictionary_type(
           map(),
+          map(),
           any(),
           String.t(),
           String.t(),
-          map(),
           map()
         ) :: map()
   defp validate_value_against_dictionary_type(
          response,
+         schema,
          value,
          attribute_path,
          attribute_name,
-         attribute_details,
-         dictionary
+         attribute_details
        ) do
-    attribute_type_key = String.to_atom(attribute_details[:type])
-    dictionary_types = dictionary[:types][:attributes]
-    dictionary_type = dictionary_types[attribute_type_key]
+    attribute_type_name = String.to_atom(attribute_details[:type])
+    dictionary_types = schema[:dictionary][:types][:attributes]
+    dictionary_type = dictionary_types[attribute_type_name]
 
     {primitive_type, expected_type, expected_type_extra} =
       if Map.has_key?(dictionary_type, :type) do
         # This is a subtype (e.g., username_t, a subtype of string_t)
         primitive_type = String.to_atom(dictionary_type[:type])
-        {primitive_type, attribute_type_key, " (#{primitive_type})"}
+        {primitive_type, attribute_type_name, " (#{primitive_type})"}
       else
         # This is a primitive type
-        {attribute_type_key, attribute_type_key, ""}
+        {attribute_type_name, attribute_type_name, ""}
       end
 
     case primitive_type do
@@ -1512,7 +1508,7 @@ defmodule Schema.Validator2 do
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
         else
@@ -1533,14 +1529,14 @@ defmodule Schema.Validator2 do
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
           |> validate_type_values(
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
         else
@@ -1561,14 +1557,14 @@ defmodule Schema.Validator2 do
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
           |> validate_type_values(
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
         else
@@ -1592,14 +1588,14 @@ defmodule Schema.Validator2 do
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
           |> validate_type_values(
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
         else
@@ -1620,21 +1616,21 @@ defmodule Schema.Validator2 do
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
           |> validate_string_regex(
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
           |> validate_type_values(
             value,
             attribute_path,
             attribute_name,
-            attribute_type_key,
+            attribute_type_name,
             dictionary_types
           )
         else
@@ -1665,7 +1661,7 @@ defmodule Schema.Validator2 do
           %{
             attribute_path: attribute_path,
             attribute: attribute_name,
-            type: attribute_type_key,
+            type: attribute_type_name,
             value: value
           }
         )
@@ -1685,10 +1681,10 @@ defmodule Schema.Validator2 do
          value,
          attribute_path,
          attribute_name,
-         attribute_type_key,
+         attribute_type_name,
          dictionary_types
        ) do
-    dictionary_type = dictionary_types[attribute_type_key]
+    dictionary_type = dictionary_types[attribute_type_name]
 
     cond do
       Map.has_key?(dictionary_type, :values) ->
@@ -1702,11 +1698,11 @@ defmodule Schema.Validator2 do
             response,
             "attribute_value_not_in_type_values",
             "Attribute \"#{attribute_path}\" value" <>
-              " is not in type \"#{attribute_type_key}\" list of allowed values.",
+              " is not in type \"#{attribute_type_name}\" list of allowed values.",
             %{
               attribute_path: attribute_path,
               attribute: attribute_name,
-              type: attribute_type_key,
+              type: attribute_type_name,
               value: value,
               allowed_values: values
             }
@@ -1715,8 +1711,8 @@ defmodule Schema.Validator2 do
 
       Map.has_key?(dictionary_type, :type) ->
         # This is a subtype, so check super type
-        super_type_key = String.to_atom(dictionary_type[:type])
-        super_type = dictionary_types[super_type_key]
+        super_type_name = String.to_atom(dictionary_type[:type])
+        super_type = dictionary_types[super_type_name]
 
         if Map.has_key?(super_type, :values) do
           values = super_type[:values]
@@ -1727,13 +1723,13 @@ defmodule Schema.Validator2 do
             add_error(
               response,
               "attribute_value_not_in_super_type_values",
-              "Attribute \"#{attribute_path}\", type \"#{attribute_type_key}\"," <>
-                " value is not in super type \"#{super_type_key}\" list of allowed values.",
+              "Attribute \"#{attribute_path}\", type \"#{attribute_type_name}\"," <>
+                " value is not in super type \"#{super_type_name}\" list of allowed values.",
               %{
                 attribute_path: attribute_path,
                 attribute: attribute_name,
-                super_type: super_type_key,
-                type: attribute_type_key,
+                super_type: super_type_name,
+                type: attribute_type_name,
                 value: value,
                 allowed_values: values
               }
@@ -1749,7 +1745,7 @@ defmodule Schema.Validator2 do
   end
 
   # Validate a number against a possible range constraint.
-  # If attribute_type_key refers to a subtype, the subtype is checked first, and if the subtype
+  # If attribute_type_name refers to a subtype, the subtype is checked first, and if the subtype
   # doesn't have a range, the supertype is checked.
   @spec validate_number_range(
           map(),
@@ -1764,10 +1760,10 @@ defmodule Schema.Validator2 do
          value,
          attribute_path,
          attribute_name,
-         attribute_type_key,
+         attribute_type_name,
          dictionary_types
        ) do
-    dictionary_type = dictionary_types[attribute_type_key]
+    dictionary_type = dictionary_types[attribute_type_name]
 
     cond do
       Map.has_key?(dictionary_type, :range) ->
@@ -1779,11 +1775,11 @@ defmodule Schema.Validator2 do
             response,
             "attribute_value_exceeds_range",
             "Attribute \"#{attribute_path}\" value" <>
-              " is outside type \"#{attribute_type_key}\" range of #{low} to #{high}.",
+              " is outside type \"#{attribute_type_name}\" range of #{low} to #{high}.",
             %{
               attribute_path: attribute_path,
               attribute: attribute_name,
-              type: attribute_type_key,
+              type: attribute_type_name,
               value: value,
               range: [low, high]
             }
@@ -1794,8 +1790,8 @@ defmodule Schema.Validator2 do
 
       Map.has_key?(dictionary_type, :type) ->
         # This is a subtype, so check super type
-        super_type_key = String.to_atom(dictionary_type[:type])
-        super_type = dictionary_types[super_type_key]
+        super_type_name = String.to_atom(dictionary_type[:type])
+        super_type = dictionary_types[super_type_name]
 
         if Map.has_key?(super_type, :range) do
           [low, high] = super_type[:range]
@@ -1804,13 +1800,13 @@ defmodule Schema.Validator2 do
             add_error(
               response,
               "attribute_value_exceeds_super_type_range",
-              "Attribute \"#{attribute_path}\", type \"#{attribute_type_key}\"," <>
-                " value is outside super type \"#{super_type_key}\" range of #{low} to #{high}.",
+              "Attribute \"#{attribute_path}\", type \"#{attribute_type_name}\"," <>
+                " value is outside super type \"#{super_type_name}\" range of #{low} to #{high}.",
               %{
                 attribute_path: attribute_path,
                 attribute: attribute_name,
-                super_type: super_type_key,
-                type: attribute_type_key,
+                super_type: super_type_name,
+                type: attribute_type_name,
                 value: value,
                 super_type_range: [low, high]
               }
@@ -1828,7 +1824,7 @@ defmodule Schema.Validator2 do
   end
 
   # Validate a string against a possible max_len constraint.
-  # If attribute_type_key refers to a subtype, the subtype is checked first, and if the subtype
+  # If attribute_type_name refers to a subtype, the subtype is checked first, and if the subtype
   # doesn't have a max_len, the supertype is checked.
   @spec validate_string_max_len(
           map(),
@@ -1843,10 +1839,10 @@ defmodule Schema.Validator2 do
          value,
          attribute_path,
          attribute_name,
-         attribute_type_key,
+         attribute_type_name,
          dictionary_types
        ) do
-    dictionary_type = dictionary_types[attribute_type_key]
+    dictionary_type = dictionary_types[attribute_type_name]
 
     cond do
       Map.has_key?(dictionary_type, :max_len) ->
@@ -1859,11 +1855,11 @@ defmodule Schema.Validator2 do
             response,
             "attribute_value_exceeds_max_len",
             "Attribute \"#{attribute_path}\" value length of #{len}" <>
-              " exceeds type \"#{attribute_type_key}\" max length #{max_len}.",
+              " exceeds type \"#{attribute_type_name}\" max length #{max_len}.",
             %{
               attribute_path: attribute_path,
               attribute: attribute_name,
-              type: attribute_type_key,
+              type: attribute_type_name,
               length: len,
               max_len: max_len,
               value: value
@@ -1875,8 +1871,8 @@ defmodule Schema.Validator2 do
 
       Map.has_key?(dictionary_type, :type) ->
         # This is a subtype, so check super type
-        super_type_key = String.to_atom(dictionary_type[:type])
-        super_type = dictionary_types[super_type_key]
+        super_type_name = String.to_atom(dictionary_type[:type])
+        super_type = dictionary_types[super_type_name]
 
         if Map.has_key?(super_type, :max_len) do
           max_len = super_type[:max_len]
@@ -1886,14 +1882,14 @@ defmodule Schema.Validator2 do
             add_error(
               response,
               "attribute_value_exceeds_super_type_max_len",
-              "Attribute \"#{attribute_path}\", type \"#{attribute_type_key}\"," <>
-                " value length #{len} exceeds super type \"#{super_type_key}\"" <>
+              "Attribute \"#{attribute_path}\", type \"#{attribute_type_name}\"," <>
+                " value length #{len} exceeds super type \"#{super_type_name}\"" <>
                 " max length #{max_len}.",
               %{
                 attribute_path: attribute_path,
                 attribute: attribute_name,
-                super_type: super_type_key,
-                type: attribute_type_key,
+                super_type: super_type_name,
+                type: attribute_type_name,
                 length: len,
                 max_len: max_len,
                 value: value
@@ -1916,10 +1912,10 @@ defmodule Schema.Validator2 do
          value,
          attribute_path,
          attribute_name,
-         attribute_type_key,
+         attribute_type_name,
          dictionary_types
        ) do
-    dictionary_type = dictionary_types[attribute_type_key]
+    dictionary_type = dictionary_types[attribute_type_name]
 
     cond do
       Map.has_key?(dictionary_type, :regex) ->
@@ -1935,11 +1931,11 @@ defmodule Schema.Validator2 do
                 response,
                 "attribute_value_regex_not_matched",
                 "Attribute \"#{attribute_path}\" value" <>
-                  " does not match regex of type \"#{attribute_type_key}\".",
+                  " does not match regex of type \"#{attribute_type_name}\".",
                 %{
                   attribute_path: attribute_path,
                   attribute: attribute_name,
-                  type: attribute_type_key,
+                  type: attribute_type_name,
                   regex: regex,
                   value: value
                 }
@@ -1948,19 +1944,19 @@ defmodule Schema.Validator2 do
 
           {:error, {message, position}} ->
             Logger.warning(
-              "SCHEMA BUG: Type \"#{attribute_type_key}\" specifies an invalid regex:" <>
+              "SCHEMA BUG: Type \"#{attribute_type_name}\" specifies an invalid regex:" <>
                 " \"#{message}\" at position #{position}, attribute path \"#{attribute_path}\""
             )
 
             add_error(
               response,
               "schema_bug_type_regex_invalid",
-              "SCHEMA BUG: Type \"#{attribute_type_key}\" specifies an invalid regex:" <>
+              "SCHEMA BUG: Type \"#{attribute_type_name}\" specifies an invalid regex:" <>
                 " \"#{message}\" at position #{position}.",
               %{
                 attribute_path: attribute_path,
                 attribute: attribute_name,
-                type: attribute_type_key,
+                type: attribute_type_name,
                 regex: regex,
                 regex_error_message: to_string(message),
                 regex_error_position: position
@@ -1970,8 +1966,8 @@ defmodule Schema.Validator2 do
 
       Map.has_key?(dictionary_type, :type) ->
         # This is a subtype, so check super type
-        super_type_key = String.to_atom(dictionary_type[:type])
-        super_type = dictionary_types[super_type_key]
+        super_type_name = String.to_atom(dictionary_type[:type])
+        super_type = dictionary_types[super_type_name]
 
         if Map.has_key?(super_type, :regex) do
           regex = dictionary_type[:regex]
@@ -1984,13 +1980,13 @@ defmodule Schema.Validator2 do
                 add_warning(
                   response,
                   "attribute_value_super_type_regex_not_matched",
-                  "Attribute \"#{attribute_path}\", type \"#{attribute_type_key}\"," <>
-                    " value does not match regex of super type \"#{super_type_key}\".",
+                  "Attribute \"#{attribute_path}\", type \"#{attribute_type_name}\"," <>
+                    " value does not match regex of super type \"#{super_type_name}\".",
                   %{
                     attribute_path: attribute_path,
                     attribute: attribute_name,
-                    super_type: super_type_key,
-                    type: attribute_type_key,
+                    super_type: super_type_name,
+                    type: attribute_type_name,
                     regex: regex,
                     value: value
                   }
@@ -1999,21 +1995,21 @@ defmodule Schema.Validator2 do
 
             {:error, {message, position}} ->
               Logger.warning(
-                "SCHEMA BUG: Type \"#{super_type_key}\"" <>
-                  " (super type of \"#{attribute_type_key}\") specifies an invalid regex:" <>
+                "SCHEMA BUG: Type \"#{super_type_name}\"" <>
+                  " (super type of \"#{attribute_type_name}\") specifies an invalid regex:" <>
                   " \"#{message}\" at position #{position}, attribute path \"#{attribute_path}\""
               )
 
               add_error(
                 response,
                 "schema_bug_type_regex_invalid",
-                "SCHEMA BUG: Type \"#{super_type_key}\"" <>
-                  " (super type of \"#{attribute_type_key}\") specifies an invalid regex:" <>
+                "SCHEMA BUG: Type \"#{super_type_name}\"" <>
+                  " (super type of \"#{attribute_type_name}\") specifies an invalid regex:" <>
                   " \"#{message}\" at position #{position}.",
                 %{
                   attribute_path: attribute_path,
                   attribute: attribute_name,
-                  type: super_type_key,
+                  type: super_type_name,
                   regex: regex,
                   regex_error_message: to_string(message),
                   regex_error_position: position

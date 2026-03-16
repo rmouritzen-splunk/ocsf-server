@@ -11,6 +11,7 @@ defmodule Schema.Translator do
   @moduledoc """
   Translates events to more user friendly form.
   """
+
   require Logger
 
   def translate(data, options) when is_map(data) do

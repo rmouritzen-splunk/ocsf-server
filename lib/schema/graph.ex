@@ -70,30 +70,30 @@ defmodule Schema.Graph do
 
   defp build_edges(edges, class, objects) do
     Map.get(class, :attributes)
-    |> Enum.reduce(edges, fn {name, obj}, acc ->
-      case obj.type do
+    |> Enum.reduce(edges, fn {attribute_name, attribute}, acc ->
+      case attribute.type do
         "object_t" ->
           # For a recursive definition, we need to add the edge, creating the looping edge
           # and then we don't want to continue searching this path.
-          recursive? = edges_member?(acc, obj)
+          recursive? = edges_member?(acc, attribute)
 
           edge =
             %{
-              source: Atom.to_string(obj[:_source]),
-              group: obj[:group],
-              requirement: obj[:requirement] || "optional",
+              source: attribute[:_source],
+              group: attribute[:group],
+              requirement: attribute[:requirement] || "optional",
               from: make_id(class.name, class[:extension]),
-              to: obj.object_type,
-              label: Atom.to_string(name)
+              to: attribute.object_type,
+              label: Atom.to_string(attribute_name)
             }
-            |> add_profile(obj[:profile])
+            |> add_profiles(attribute[:profiles])
 
           acc = [edge | acc]
 
           # For recursive definitions, we've already added the edge creating the loop in the graph.
           # There's no need to recurse further (avoid infinite loops).
           if not recursive? do
-            o = objects[String.to_atom(obj.object_type)]
+            o = objects[String.to_atom(attribute.object_type)]
             build_edges(acc, o, objects)
           else
             acc
@@ -109,11 +109,11 @@ defmodule Schema.Graph do
     Enum.any?(edges, fn edge -> obj.object_type == edge.to end)
   end
 
-  defp add_profile(edge, nil) do
+  defp add_profiles(edge, nil) do
     edge
   end
 
-  defp add_profile(edge, profile) do
-    Map.put(edge, :profile, profile)
+  defp add_profiles(edge, profiles) do
+    Map.put(edge, :profiles, Enum.intersperse(profiles, ", "))
   end
 end

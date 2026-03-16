@@ -188,7 +188,7 @@ sup.bg-warning {
 
 /* Smooth deprecated element animations */
 .deprecated {
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
               transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
               max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
@@ -269,6 +269,13 @@ sup.bg-warning {
 /* Source Indicators - Icon-based approach for extensions and profiles */
 .source-indicator {
   font-size: 0.7rem;
+  margin-left: 3px;
+  cursor: help;
+  transition: var(--transition-fast);
+}
+
+.source-indicator-small {
+  font-size: 0.6125rem;
   margin-left: 3px;
   cursor: help;
   transition: var(--transition-fast);

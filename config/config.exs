@@ -1,7 +1,6 @@
 import Config
 
 port = System.get_env("HTTP_PORT") || System.get_env("PORT") || 8080
-path = System.get_env("SCHEMA_PATH") || "/"
 
 # Configures the endpoint
 config :schema_server, SchemaWeb.Endpoint,
@@ -30,10 +29,9 @@ config :schema_server, :phoenix_swagger,
 
 config :phoenix_swagger, json_library: Jason
 
-# Configures the location of the schema files
-config :schema_server, Schema.Application, home: System.get_env("SCHEMA_DIR") || "../ocsf-schema"
-config :schema_server, Schema.Application, extension: System.get_env("SCHEMA_EXTENSION")
-config :schema_server, Schema.Application, schema_home: System.get_env("SCHEMA_HOME")
+# Configures the locations of the schema files
+config :schema_server, Schema.Application, schema_file: System.get_env("SCHEMA_FILE")
+config :schema_server, Schema.Application, schemas_home: System.get_env("SCHEMAS_HOME")
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

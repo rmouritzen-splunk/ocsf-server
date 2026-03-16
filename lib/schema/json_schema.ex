@@ -21,37 +21,38 @@ defmodule Schema.JsonSchema do
   Options: :package_name | :schema_version
   """
   @spec encode(map(), nil | Keyword.t()) :: map()
-  def encode(type, options) when is_map(type) do
+  def encode(item, options) when is_map(item) do
     Process.put(:options, options || [])
 
+    data_types = Schema.clean_data_types_attributes()
+
     try do
-      encode(type)
+      encode_item(item, data_types)
     after
       Process.delete(:options)
     end
   end
 
-  def encode(type) do
-    name = type[:name]
+  @spec encode_item(map(), map()) :: map()
+  defp encode_item(item, data_types) do
+    name = item[:name]
 
-    {properties, required, just_one, at_least_one} = map_reduce(name, type)
+    {properties, required, just_one, at_least_one} = map_reduce(name, item, data_types)
 
-    ext = type[:extension]
-
-    if Map.has_key?(type, :_links) do
+    if Map.has_key?(item, :uid) do
+      class_schema(make_class_ref(name))
+    else
       Map.new()
       |> add_java_class(name)
-    else
-      class_schema(make_class_ref(name, ext))
     end
-    |> Map.put("title", type[:caption])
+    |> Map.put("title", item[:caption])
     |> Map.put("type", "object")
     |> Map.put("properties", properties)
     |> Map.put("additionalProperties", false)
     |> put_required(required)
     |> put_just_one(just_one)
     |> put_at_least_one(at_least_one)
-    |> encode_objects(type[:objects])
+    |> encode_objects(item[:objects], data_types)
     |> empty_object(properties)
   end
 
@@ -94,12 +95,8 @@ defmodule Schema.JsonSchema do
     "#/$defs"
   end
 
-  defp make_class_ref(name, nil) do
+  defp make_class_ref(name) do
     Path.join([@schema_base_uri, name])
-  end
-
-  defp make_class_ref(name, ext) do
-    Path.join([@schema_base_uri, ext, name])
   end
 
   defp empty_object(map, properties) do
@@ -149,86 +146,90 @@ defmodule Schema.JsonSchema do
     Map.put(map, "anyOf", any_of)
   end
 
-  defp encode_objects(schema, nil) do
+  defp encode_objects(schema, nil, _data_types) do
     schema
   end
 
-  defp encode_objects(schema, []) do
+  defp encode_objects(schema, [], _data_types) do
     schema
   end
 
-  defp encode_objects(schema, objects) do
+  defp encode_objects(schema, objects, data_types) do
     defs =
       Enum.into(objects, %{}, fn {name, object} ->
         key = Atom.to_string(name) |> String.replace("/", "_")
-        {key, encode(object)}
+        {key, encode_item(object, data_types)}
       end)
 
     Map.put(schema, "$defs", defs)
   end
 
-  defp map_reduce(type_name, type) do
+  defp map_reduce(type_name, type, data_types) do
     {properties, {required, just_one, at_least_one}} =
-      Enum.map_reduce(type[:attributes], {[], [], []}, fn {key, attribute},
-                                                          {required, just_one, at_least_one} ->
-        name = Atom.to_string(key)
-        just_one_list = List.wrap(type[:constraints][:just_one])
-        at_least_one_list = List.wrap(type[:constraints][:at_least_one])
+      Enum.map_reduce(
+        Enum.sort_by(type[:attributes], fn {k, _} -> k end, :desc),
+        {[], [], []},
+        fn {key, attribute}, {required, just_one, at_least_one} ->
+          name = Atom.to_string(key)
+          just_one_list = List.wrap(type[:constraints][:just_one])
+          at_least_one_list = List.wrap(type[:constraints][:at_least_one])
 
-        cond do
-          name in just_one_list ->
-            {required, [name | just_one], at_least_one}
+          cond do
+            name in Enum.sort(just_one_list) ->
+              {required, [name | just_one], at_least_one}
 
-          name in at_least_one_list ->
-            {required, just_one, [name | at_least_one]}
+            name in Enum.sort(at_least_one_list) ->
+              {required, just_one, [name | at_least_one]}
 
-          attribute[:requirement] == "required" ->
-            {[name | required], just_one, at_least_one}
+            attribute[:requirement] == "required" ->
+              {[name | required], just_one, at_least_one}
 
-          true ->
-            {required, just_one, at_least_one}
+            true ->
+              {required, just_one, at_least_one}
+          end
+          |> (fn {required, just_one, at_least_one} ->
+                schema =
+                  encode_attribute(type_name, attribute[:type], attribute, data_types)
+                  |> encode_array(attribute[:is_array])
+
+                {{name, schema}, {required, just_one, at_least_one}}
+              end).()
         end
-        |> (fn {required, just_one, at_least_one} ->
-              schema =
-                encode_attribute(type_name, attribute[:type], attribute)
-                |> encode_array(attribute[:is_array])
-
-              {{name, schema}, {required, just_one, at_least_one}}
-            end).()
-      end)
+      )
 
     {Map.new(properties), required, just_one, at_least_one}
   end
 
-  defp encode_attribute(_name, "integer_t", attr) do
+  defp encode_attribute(_name, "integer_t", attr, _data_types) do
     new_schema(attr) |> encode_integer(attr)
   end
 
-  defp encode_attribute(_name, "string_t", attr) do
+  defp encode_attribute(_name, "string_t", attr, _data_types) do
     new_schema(attr) |> encode_string(attr)
   end
 
-  defp encode_attribute(name, "object_t", attr) do
+  defp encode_attribute(name, "object_t", attr, _data_types) do
     new_schema(attr) |> encode_object(name, attr)
   end
 
-  defp encode_attribute(_name, "json_t", attr) do
+  defp encode_attribute(_name, "json_t", attr, _data_types) do
     new_schema(attr)
   end
 
-  defp encode_attribute(_name, type, attr) do
-    new_schema(attr) |> Map.put("type", encode_type(type))
+  defp encode_attribute(_name, type, attr, data_types) do
+    new_schema(attr) |> Map.put("type", encode_type(data_types, type))
   end
 
   defp new_schema(attr), do: %{"title" => attr[:caption]}
 
-  defp encode_type(type) do
+  @spec encode_type(map(), String.t()) :: String.t()
+  defp encode_type(data_types, type) do
     cond do
-      Schema.data_type?(type, "string_t") -> "string"
-      Schema.data_type?(type, "integer_t") -> "integer"
-      Schema.data_type?(type, "long_t") -> "integer"
-      Schema.data_type?(type, "float_t") -> "number"
-      Schema.data_type?(type, "boolean_t") -> "boolean"
+      Schema.data_type?(data_types, type, "string_t") -> "string"
+      Schema.data_type?(data_types, type, "integer_t") -> "integer"
+      Schema.data_type?(data_types, type, "long_t") -> "integer"
+      Schema.data_type?(data_types, type, "float_t") -> "number"
+      Schema.data_type?(data_types, type, "boolean_t") -> "boolean"
       true -> type
     end
   end
@@ -266,9 +267,12 @@ defmodule Schema.JsonSchema do
   end
 
   defp encode_enum_values(enum, encoder) do
-    Enum.map(enum, fn {name, _} ->
-      encoder.(name)
+    enum
+    |> Map.keys()
+    |> Enum.map(fn k ->
+      encoder.(k)
     end)
+    |> Enum.sort()
   end
 
   defp encode_array(schema, true) do

@@ -11,6 +11,7 @@ defmodule Schema.Helper do
   @moduledoc """
   Provides helper functions to enrich the event data.
   """
+
   require Logger
 
   def enrich(data, enum_text, observables) when is_map(data) do
@@ -18,22 +19,25 @@ defmodule Schema.Helper do
       "enrich event: #{inspect(data)}, enum_text: #{enum_text}, observables: #{observables}"
     end)
 
-    enrich_class(data["class_uid"], data, enum_text, observables)
+    schema = Schema.clean_schema()
+    enrich_class(schema, data["class_uid"], data, enum_text, observables)
   end
 
   # this is not an event
-  def enrich(data, _enum_text, _observables), do: %{:error => "Not a JSON object", :data => data}
+  def enrich(_schema, data, _enum_text, _observables) do
+    %{:error => "Not a JSON object", :data => data}
+  end
 
   # missing class_uid
-  defp enrich_class(nil, data, _enum_text, _observables),
+  defp enrich_class(_schema, nil, data, _enum_text, _observables),
     do: %{:error => "Missing class_uid", :data => data}
 
-  defp enrich_class(class_uid, data, enum_text, _observables) do
+  defp enrich_class(schema, class_uid, data, enum_text, _observable) do
     Logger.debug("enrich class: #{class_uid}")
 
-    # if observables == "true", do: 
+    # if observables == "true", do:
 
-    case Schema.find_class(class_uid) do
+    case find_class(schema, class_uid) do
       # invalid event class ID
       nil ->
         %{:error => "Invalid class_uid: #{class_uid}", :data => data}
@@ -42,14 +46,22 @@ defmodule Schema.Helper do
         data = type_uid(class_uid, data)
 
         if enum_text == "true" do
-          enrich_type(class, data)
+          enrich_type(schema, class, data)
         else
           data
         end
     end
   end
 
-  defp enrich_type(type, data) do
+  @spec find_class(map(), integer()) :: nil | Schema.Utils.class_t()
+  defp find_class(schema, uid) when is_integer(uid) do
+    case Enum.find(schema[:classes], fn {_, class} -> class[:uid] == uid end) do
+      {_, class} -> class
+      nil -> nil
+    end
+  end
+
+  defp enrich_type(schema, type, data) do
     attributes = type[:attributes]
 
     Enum.reduce(data, %{}, fn {name, value}, acc ->
@@ -61,7 +73,7 @@ defmodule Schema.Helper do
           Map.put(acc, name, value)
 
         attribute ->
-          {name, text} = enrich_attribute(attribute[:type], name, attribute, value)
+          {name, text} = enrich_attribute(schema, attribute[:type], name, attribute, value)
 
           if Map.has_key?(attribute, :enum) do
             Logger.debug("enrich enum: #{name} = #{text}")
@@ -88,7 +100,7 @@ defmodule Schema.Helper do
       activity_id ->
         uid =
           if activity_id >= 0 do
-            Schema.Types.type_uid(class_uid, activity_id)
+            Schema.Utils.type_uid(class_uid, activity_id)
           else
             0
           end
@@ -100,21 +112,22 @@ defmodule Schema.Helper do
   defp to_atom(key) when is_atom(key), do: key
   defp to_atom(key), do: String.to_atom(key)
 
-  defp enrich_attribute("integer_t", name, attribute, value) do
+  defp enrich_attribute(_schema, "integer_t", name, attribute, value) do
     enrich_integer(attribute[:enum], name, value)
   end
 
-  defp enrich_attribute("object_t", name, attribute, value) when is_map(value) do
-    {name, enrich_type(Schema.object(attribute[:object_type]), value)}
+  defp enrich_attribute(schema, "object_t", name, attribute, value) when is_map(value) do
+    object = schema[:objects][Schema.Utils.to_uid(attribute[:object_type])]
+    {name, enrich_type(schema, object, value)}
   end
 
-  defp enrich_attribute("object_t", name, attribute, value) when is_list(value) do
+  defp enrich_attribute(schema, "object_t", name, attribute, value) when is_list(value) do
     data =
       if attribute[:is_array] and is_map(List.first(value)) do
-        obj_type = Schema.object(attribute[:object_type])
+        object = schema[:objects][Schema.Utils.to_uid(attribute[:object_type])]
 
         Enum.map(value, fn data ->
-          enrich_type(obj_type, data)
+          enrich_type(schema, object, data)
         end)
       else
         value
@@ -123,7 +136,7 @@ defmodule Schema.Helper do
     {name, data}
   end
 
-  defp enrich_attribute(_, name, _attribute, value) do
+  defp enrich_attribute(_schema, _type, name, _attribute, value) do
     {name, value}
   end
 

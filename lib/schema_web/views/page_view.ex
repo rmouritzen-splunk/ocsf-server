@@ -1,6 +1,7 @@
 defmodule SchemaWeb.PageView do
-  alias SchemaWeb.SchemaController
   use SchemaWeb, :view
+
+  alias Schema.Utils
 
   @at_least_one_symbol "†"
   @just_one_symbol "‡"
@@ -55,58 +56,69 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  def class_profiles(conn, class, profiles) do
-    case class[:profiles] || [] do
+  def profile_badges(conn, item, profiles) do
+    case item[:profiles] || [] do
       [] ->
         ""
 
-      list ->
-        [
-          "<h5 class='mt-3'>Profiles</h5>",
-          "Applicable profiles: ",
-          Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
-          |> Enum.map_join(", ", fn name ->
-            profile_link(conn, get_in(profiles, [name, :caption]), name)
-          end),
-          "."
-        ]
-    end
-  end
-
-  def profile_badges(conn, class, profiles) do
-    case class[:profiles] || [] do
-      [] ->
-        ""
-
-      list ->
-        applicable_profiles = Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
+      profile_names ->
+        applicable_profiles =
+          Stream.filter(
+            profile_names,
+            fn profile_name -> Map.has_key?(profiles, Utils.to_uid(profile_name)) end
+          )
 
         if Enum.empty?(applicable_profiles) do
           ""
         else
-          badges = Enum.map(applicable_profiles, fn name ->
-            caption = get_in(profiles, [name, :caption]) || name
-            path = Routes.static_path(conn, "/profiles/" <> name)
-            [
-              "<span class='profile-badge'>",
-              "<a href='", path, "' title='Profile: ", caption, "'>",
-              "<i class='fas fa-tag'></i> ", caption,
-              "</a>",
-              "</span>"
-            ]
-          end)
+          badges =
+            Enum.map(applicable_profiles, fn profile_name ->
+              profile = profiles[Utils.to_uid(profile_name)]
+              path = Routes.static_path(conn, "/profiles/" <> profile_name)
+              caption = profile[:caption] || profile_name
+              extension = profile[:extension]
 
-          ["<div class='profile-badges'><span class='profile-label'>Applicable Profiles:</span> ", Enum.intersperse(badges, " "), "</div>"]
+              title =
+                if extension && extension != "" do
+                  "#{caption} from #{extension} extension"
+                else
+                  caption
+                end
+
+              [
+                "<span class='profile-badge'>",
+                "<a href='",
+                path,
+                "' title='Profile: ",
+                title,
+                "'>",
+                "<i class='fas fa-tag'></i> ",
+                caption,
+                "</a>",
+                "</span>"
+              ]
+            end)
+
+          [
+            "<div class='profile-badges'><span class='profile-label'>Applicable Profiles:</span> ",
+            Enum.intersperse(badges, " "),
+            "</div>"
+          ]
         end
     end
   end
 
   @spec get_applicable_profiles(map(), map()) :: list()
-  def get_applicable_profiles(data, profiles) do
-    case data[:profiles] || [] do
-      [] -> []
-      list ->
-        Stream.filter(list, fn profile -> Map.has_key?(profiles, profile) end)
+  def get_applicable_profiles(item, profiles) do
+    case item[:profiles] || [] do
+      [] ->
+        []
+
+      profile_names ->
+        Stream.filter(
+          profile_names,
+          fn profile_name -> Map.has_key?(profiles, Utils.to_uid(profile_name)) end
+        )
         |> Enum.to_list()
     end
   end
@@ -114,22 +126,15 @@ defmodule SchemaWeb.PageView do
   @spec format_applicable_profiles_json(list()) :: String.t()
   def format_applicable_profiles_json(applicable_profiles) do
     case applicable_profiles do
-      [] -> "[]"
+      [] ->
+        "[]"
+
       profiles ->
         profiles
-        |> Enum.map(&("\"#{&1}\""))
+        |> Enum.map(&"\"#{&1}\"")
         |> Enum.join(",")
         |> (fn str -> "[#{str}]" end).()
     end
-  end
-
-  defp profile_link(_conn, nil, name) do
-    name
-  end
-
-  defp profile_link(conn, caption, name) do
-    path = Routes.static_path(conn, "/profiles/" <> name)
-    "<a href='#{path}'>#{caption}</a>"
   end
 
   def format_profiles(nil) do
@@ -167,16 +172,36 @@ defmodule SchemaWeb.PageView do
         uid -> name <> "<span class='uid'> [#{uid}]</span>"
       end
 
-    case field[:extension] do
-      nil -> name
-      extension when extension != "" -> name <> " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>"
-      _ -> name
+    cond do
+      field[:extension] != nil and field[:extension] != "" ->
+        name <>
+          " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{field[:extension]} extension'><i class='fas fa-layer-group'></i></sup>"
+
+      field[:_patched_by_extensions] ->
+        patched_by_extensions = field[:_patched_by_extensions]
+
+        if Enum.count(patched_by_extensions) == 1 do
+          name <>
+            " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by #{Enum.at(patched_by_extensions, 0)} extension'><i class='fas fa-code-merge'></i></sup>"
+        else
+          name <>
+            " <sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by extensions: #{Enum.intersperse(patched_by_extensions, ", ")}'><i class='fas fa-code-merge'></i></sup>"
+        end
+
+      true ->
+        name
     end
   end
 
-  @spec format_attribute_caption(any, String.t() | atom, nil | maybe_improper_list | map) :: any
-  def format_attribute_caption(conn, entity_key, entity) do
-    {observable_type_id, observable_kind} = observable_type_id_and_kind(entity)
+  @spec format_attribute_caption(
+          any,
+          map(),
+          String.t() | atom,
+          nil | maybe_improper_list | map,
+          boolean()
+        ) :: any
+  def format_attribute_caption(conn, schema, entity_key, entity, is_attribute \\ true) do
+    {observable_type_id, observable_kind} = observable_type_id_and_kind(schema, entity)
 
     caption = entity[:caption] || to_string(entity_key)
 
@@ -205,19 +230,58 @@ defmodule SchemaWeb.PageView do
     # Add subtle source indicators with icons matching the sidebar
     source_indicators = []
 
-    source_indicators = case entity[:extension] do
-      nil -> source_indicators
-      extension when extension != "" ->
-        ["<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{extension} extension'><i class='fas fa-layer-group'></i></sup>" | source_indicators]
-      _ -> source_indicators
-    end
+    source_indicators =
+      cond do
+        entity[:extension] != nil and entity[:extension] != "" ->
+          [
+            "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='From #{entity[:extension]} extension'><i class='fas fa-layer-group'></i></sup>"
+            | source_indicators
+          ]
 
-    source_indicators = case entity[:profile] do
-      nil -> source_indicators
-      profile when profile != "" ->
-        ["<sup class='source-indicator profile-indicator' data-toggle='tooltip' title='From #{profile} profile'><i class='fas fa-tag'></i></sup>" | source_indicators]
-      _ -> source_indicators
-    end
+        entity[:_patched_by_extensions] ->
+          patched_by_extensions = entity[:_patched_by_extensions]
+
+          if Enum.count(patched_by_extensions) == 1 do
+            [
+              "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by #{Enum.at(patched_by_extensions, 0)} extension'><i class='fas fa-code-merge'></i></sup>"
+              | source_indicators
+            ]
+          else
+            [
+              "<sup class='source-indicator extension-indicator' data-toggle='tooltip' title='Patched by extensions: #{Enum.intersperse(patched_by_extensions, ", ")}'><i class='fas fa-code-merge'></i></sup>"
+              | source_indicators
+            ]
+          end
+
+        true ->
+          source_indicators
+      end
+
+    source_indicators =
+      if is_attribute do
+        case entity[:profiles] do
+          nil ->
+            source_indicators
+
+          profiles when is_list(profiles) ->
+            profiles_text =
+              if Enum.count(profiles) == 1 do
+                "From #{Enum.at(profiles, 0)} profile"
+              else
+                "From profiles: #{Enum.intersperse(profiles, ", ")}"
+              end
+
+            [
+              "<sup class='source-indicator profile-indicator' data-toggle='tooltip' title='#{profiles_text}'><i class='fas fa-tag'></i></sup>"
+              | source_indicators
+            ]
+
+          _ ->
+            source_indicators
+        end
+      else
+        source_indicators
+      end
 
     if Enum.empty?(source_indicators) do
       caption
@@ -226,8 +290,9 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  defp observable_type_id_and_kind(entity) do
-    observable_object = Schema.object(:observable)
+  defp observable_type_id_and_kind(schema, entity) do
+    objects = schema[:objects]
+    observable_object = objects[:observable]
 
     observable_type_id_map =
       if observable_object do
@@ -241,7 +306,7 @@ defmodule SchemaWeb.PageView do
         {nil, nil}
 
       Map.has_key?(entity, :observable) ->
-        observable_type_id = Schema.Utils.observable_type_id_to_atom(entity[:observable])
+        observable_type_id = Utils.observable_type_id_to_atom(entity[:observable])
         enum_details = observable_type_id_map[observable_type_id]
 
         {
@@ -251,12 +316,12 @@ defmodule SchemaWeb.PageView do
 
       Map.has_key?(entity, :type) ->
         # Check if this is a dictionary type
-        type = Schema.dictionary()[:types][:attributes][Schema.Utils.to_uid(entity[:type])]
+        type = schema[:dictionary][:types][:attributes][Utils.to_uid(entity[:type])]
         type_observable = type[:observable]
 
         cond do
           type_observable ->
-            observable_type_id = Schema.Utils.observable_type_id_to_atom(type_observable)
+            observable_type_id = Utils.observable_type_id_to_atom(type_observable)
             enum_details = observable_type_id_map[observable_type_id]
 
             {
@@ -266,11 +331,11 @@ defmodule SchemaWeb.PageView do
 
           Map.has_key?(entity, :object_type) ->
             # Check if this object is an observable
-            object_key = Schema.Utils.to_uid(entity[:object_type])
-            object_observable = Schema.object(object_key)[:observable]
+            object_key = Utils.to_uid(entity[:object_type])
+            object_observable = objects[object_key][:observable]
 
             if object_observable do
-              observable_type_id = Schema.Utils.observable_type_id_to_atom(object_observable)
+              observable_type_id = Utils.observable_type_id_to_atom(object_observable)
               enum_details = observable_type_id_map[observable_type_id]
 
               {
@@ -292,14 +357,14 @@ defmodule SchemaWeb.PageView do
 
   @spec format_attribute_name(String.t() | atom()) :: any
   def format_attribute_name(name) do
-    Schema.Utils.descope(name)
+    Utils.descope(name)
   end
 
-  @spec format_class_attribute_source(atom(), map()) :: String.t()
-  def format_class_attribute_source(class_key, field) do
-    all_classes = Schema.all_classes()
-    source = get_hierarchy_source(field)
-    {ok, path} = build_hierarchy(Schema.Utils.to_uid(class_key), source, all_classes)
+  @spec format_class_attribute_source(map(), atom() | String.t(), map()) :: list() | String.t()
+  def format_class_attribute_source(schema, class_name, field) do
+    all_classes = schema[:all_classes]
+    source = Utils.to_uid(field[:_source])
+    {ok, path} = build_hierarchy(Utils.to_uid(class_name), source, all_classes)
 
     if ok do
       format_hierarchy(path, all_classes, "class")
@@ -308,24 +373,17 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec format_object_attribute_source(atom(), map()) :: String.t()
-  def format_object_attribute_source(object_key, field) do
-    all_objects = Schema.all_objects()
-    source = get_hierarchy_source(field)
-    {ok, path} = build_hierarchy(Schema.Utils.to_uid(object_key), source, all_objects)
+  @spec format_object_attribute_source(map(), atom() | String.t(), map()) :: list() | String.t()
+  def format_object_attribute_source(schema, object_name, field) do
+    all_objects = schema[:all_objects]
+    source = Utils.to_uid(field[:_source])
+    {ok, path} = build_hierarchy(Utils.to_uid(object_name), source, all_objects)
 
     if ok do
       format_hierarchy(path, all_objects, "object")
     else
-      to_string(source)
+      source
     end
-  end
-
-  defp get_hierarchy_source(field) do
-    # In the case of an attribute from a patched class or object, we want to display the final
-    # compiled type, which is in :_source_patched and in this case :_source contains the name of
-    # the pre-patched item.
-    field[:_source_patched] || field[:_source]
   end
 
   # Build a class or object hierarchy path from item_key to target_parent_item_key.
@@ -347,8 +405,7 @@ defmodule SchemaWeb.PageView do
       true ->
         item = all_items[item_key]
         extends = item[:extends]
-        extension = item[:extension]
-        {parent_item_key, _parent_time} = Schema.Utils.find_parent(all_items, extends, extension)
+        {parent_item_key, _parent_time} = Utils.find_parent(all_items, extends)
 
         build_hierarchy(
           parent_item_key,
@@ -359,6 +416,7 @@ defmodule SchemaWeb.PageView do
     end
   end
 
+  @spec format_hierarchy(list(), map(), String.t()) :: list() | String.t()
   defp format_hierarchy(path, all_items, kind) do
     Enum.map(
       path,
@@ -437,7 +495,7 @@ defmodule SchemaWeb.PageView do
   @spec field_classes(map) :: nonempty_binary
   def field_classes(field) do
     css_classes =
-      if field[:_source] == :base_event or field[:_source] == :event do
+      if field[:_source] == "base_event" or field[:_source] == "event" do
         "base-event "
       else
         "event "
@@ -463,14 +521,30 @@ defmodule SchemaWeb.PageView do
         css_classes <> "no-group"
       end
 
-    profile = field[:profile]
-
-    css_classes =
-      if profile != nil do
-        css_classes <> " " <> String.replace(profile, "/", "-")
-      else
-        css_classes <> " no-profile"
-      end
+    # This is broken now that attributes can have more than one profile because app.js assumes
+    # a row will have either a CSS class based on a single profile OR no-profile. The visibility
+    # is based on the number of CSS classes (app.js line 170).
+    # HOWEVER we no longer use JavaScript to enable the display of extensions and profiles and
+    # instead reload the page using Elixir code to filter extensions and profiles.
+    # The code in Schema has been changed to do the entire profiles filtering for pages.
+    # Evidently the prior JavaScript approach was never cleaned up after this change.
+    #
+    # profiles = field[:profiles]
+    # css_classes =
+    #   if profiles != nil do
+    #     # THIS IS THE (IRRELEVANT) PART THAT'S BROKEN.
+    #     # This used to be a single profile but now it's a list.
+    #     Enum.reduce(profiles, css_classes, fn profile, css_classes ->
+    #       css_classes <> " " <> String.replace(profile, "/", "-")
+    #     end)
+    #   else
+    #     css_classes <> " no-profile"
+    #   end
+    #
+    # Until we have time to untangle this mess, we can simply use the no-profile CSS class.
+    # TODO: Cleanup profiles and CSS class interaction. Note that we cannot simply remove all of
+    #       this logic as it is used with the extension checkboxes and reloading page on click.
+    css_classes = css_classes <> " no-profile"
 
     show_deprecated_css_classes(field, css_classes)
   end
@@ -485,8 +559,15 @@ defmodule SchemaWeb.PageView do
     r == "recommended"
   end
 
-  def format_constraints(:string_t, field) do
-    format_string_constraints(field)
+  def format_constraints(:boolean_t, field) do
+    case Map.get(field, :values) do
+      nil -> ""
+      values -> format_values(values)
+    end
+  end
+
+  def format_constraints(:float_t, _field) do
+    ""
   end
 
   def format_constraints(:integer_t, field) do
@@ -497,32 +578,37 @@ defmodule SchemaWeb.PageView do
     format_integer_constraints(field)
   end
 
-  def format_constraints("string_t", field) do
+  def format_constraints(:string_t, field) do
     format_string_constraints(field)
   end
 
-  def format_constraints("integer_t", field) do
-    format_integer_constraints(field)
-  end
-
-  def format_constraints("long_t", field) do
-    format_integer_constraints(field)
-  end
-
-  def format_constraints(:boolean_t, field) do
-    case Map.get(field, :values) do
-      nil -> ""
-      values -> format_values(values)
-    end
-  end
-
-  def format_constraints(nil, field) do
-    format_max_len(field)
-  end
-
-  # format data type constraints: values, range, regex, and max_len
+  # format potential subtypes
   def format_constraints(_type, field) do
-    format_constraints(Map.get(field, :type), field)
+    format_subtype_constraints(field[:type], field)
+  end
+
+  def format_subtype_constraints("boolean_t", _field) do
+    ""
+  end
+
+  def format_subtype_constraints("float_t", _field) do
+    ""
+  end
+
+  def format_subtype_constraints("integer_t", field) do
+    format_integer_constraints(field)
+  end
+
+  def format_subtype_constraints("long_t", field) do
+    format_integer_constraints(field)
+  end
+
+  def format_subtype_constraints("string_t", field) do
+    format_string_constraints(field)
+  end
+
+  def format_subtype_constraints(_type, _field) do
+    ""
   end
 
   defp format_integer_constraints(field) do
@@ -850,29 +936,29 @@ defmodule SchemaWeb.PageView do
     ]
   end
 
-  @spec dictionary_links(any(), String.t(), list(Schema.Utils.link_t())) :: <<>> | list()
-  def dictionary_links(_, _, nil), do: ""
-  def dictionary_links(_, _, []), do: ""
+  @spec dictionary_links(any(), map(), String.t(), list(Utils.link_t())) :: String.t() | list()
+  def dictionary_links(_, _, _, nil), do: ""
+  def dictionary_links(_, _, _, []), do: ""
 
-  def dictionary_links(conn, attribute_name, links) do
+  def dictionary_links(conn, schema, attribute_name, links) do
     groups = Enum.group_by(links, fn link -> link[:group] end)
 
-    commons_html = dictionary_links_common_to_html(conn, groups[:common])
+    commons_html = dictionary_links_common_to_html(conn, groups["common"])
 
     classes_html =
       if Enum.empty?(commons_html) do
-        dictionary_links_class_to_html(conn, attribute_name, groups[:class])
+        dictionary_links_class_to_html(conn, schema, attribute_name, groups["class"])
       else
         Enum.intersperse(
           [
             "Referenced by all classes",
-            dictionary_links_class_updated_to_html(conn, attribute_name, groups[:class])
+            dictionary_links_class_updated_to_html(conn, schema, attribute_name, groups["class"])
           ],
           "<br>"
         )
       end
 
-    objects_html = links_object_to_html(conn, attribute_name, groups[:object], :collapse)
+    objects_html = links_object_to_html(conn, attribute_name, groups["object"], :collapse)
 
     Enum.reject([commons_html, classes_html, objects_html], &Enum.empty?/1)
     |> Enum.intersperse("<hr>")
@@ -913,14 +999,12 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  defp dictionary_links_class_to_html(_, _, nil), do: []
+  defp dictionary_links_class_to_html(_, _, _, nil), do: []
 
-  defp dictionary_links_class_to_html(conn, attribute_name, linked_classes) do
-    # Strip profiles parameter to get classes with proper source attribution
-    params_without_profiles = Map.delete(conn.params, "profiles")
-    classes = SchemaController.classes(params_without_profiles)
-    all_classes = Schema.all_classes()
-    attribute_key = Schema.Utils.descope_to_uid(attribute_name)
+  defp dictionary_links_class_to_html(conn, schema, attribute_name, linked_classes) do
+    classes = schema[:classes]
+    all_classes = schema[:all_classes]
+    attribute_key = Utils.descope_to_uid(attribute_name)
 
     html_list =
       reverse_sort_links(linked_classes)
@@ -928,9 +1012,9 @@ defmodule SchemaWeb.PageView do
         [],
         fn link, acc ->
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
-          class_key = Schema.Utils.to_uid(link[:type])
+          class_key = Utils.to_uid(link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
-          source = attribute[:_source_patched] || attribute[:_source]
+          source = Utils.to_uid(attribute[:_source])
 
           cond do
             source == nil ->
@@ -1034,25 +1118,23 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  defp dictionary_links_class_updated_to_html(_, _, nil), do: []
+  defp dictionary_links_class_updated_to_html(_, _, _, nil), do: []
 
-  defp dictionary_links_class_updated_to_html(conn, attribute_name, linked_classes) do
-    # Strip profiles parameter to get classes with proper source attribution
-    params_without_profiles = Map.delete(conn.params, "profiles")
-    classes = SchemaController.classes(params_without_profiles)
-    all_classes = Schema.all_classes()
-    attribute_key = Schema.Utils.descope_to_uid(attribute_name)
+  defp dictionary_links_class_updated_to_html(conn, schema, attribute_name, linked_classes) do
+    classes = schema[:classes]
+    all_classes = schema[:all_classes]
+    attribute_key = Utils.descope_to_uid(attribute_name)
 
     {html_list, deprecated_count} =
       reverse_sort_links(linked_classes)
       |> Enum.reduce(
         {[], 0},
         fn link, {html_list, deprecated_count} ->
-          class_key = Schema.Utils.to_uid(link[:type])
+          class_key = Utils.to_uid(link[:type])
 
           type_path = SchemaWeb.Router.Helpers.static_path(conn, "/classes/" <> link[:type])
           attribute = classes[class_key][:attributes][attribute_key]
-          source = attribute[:_source_patched] || attribute[:_source]
+          source = Utils.to_uid(attribute[:_source])
 
           cond do
             source == nil ->
@@ -1229,8 +1311,12 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec object_links(any(), String.t(), list(Schema.Utils.link_t()), nil | :collapse) ::
-          <<>> | list()
+  @spec object_links(
+          any(),
+          String.t(),
+          list(Utils.link_t()),
+          nil | :collapse
+        ) :: String.t() | list()
   def object_links(conn, name, links, list_presentation \\ nil)
   def object_links(_, _, nil, _), do: ""
   def object_links(_, _, [], _), do: ""
@@ -1238,9 +1324,9 @@ defmodule SchemaWeb.PageView do
   def object_links(conn, name, links, list_presentation) do
     groups = Enum.group_by(links, fn link -> link[:group] end)
 
-    commons_html = object_links_common_to_html(conn, groups[:common], list_presentation)
-    classes_html = object_links_class_to_html(conn, name, groups[:class], list_presentation)
-    objects_html = object_links_object_to_html(conn, name, groups[:object], list_presentation)
+    commons_html = object_links_common_to_html(conn, groups["common"], list_presentation)
+    classes_html = object_links_class_to_html(conn, name, groups["class"], list_presentation)
+    objects_html = object_links_object_to_html(conn, name, groups["object"], list_presentation)
 
     Enum.reject([commons_html, classes_html, objects_html], &Enum.empty?/1)
     |> Enum.intersperse("<hr>")
@@ -1248,7 +1334,7 @@ defmodule SchemaWeb.PageView do
 
   defp link_attributes(link) do
     attribute_keys = link[:attribute_keys]
-    attribute_keys_size = if attribute_keys == nil, do: 0, else: MapSet.size(attribute_keys)
+    attribute_keys_size = if attribute_keys == nil, do: 0, else: Enum.count(attribute_keys)
 
     case attribute_keys_size do
       0 ->
@@ -1474,8 +1560,12 @@ defmodule SchemaWeb.PageView do
     end
   end
 
-  @spec profile_links(any(), String.t(), list(Schema.Utils.link_t()), nil | :collapse) ::
-          <<>> | list()
+  @spec profile_links(
+          any(),
+          String.t(),
+          list(Utils.link_t()),
+          nil | :collapse
+        ) :: String.t() | list()
   def profile_links(conn, profile_name, links, list_presentation \\ nil)
   def profile_links(_, _, nil, _), do: ""
   def profile_links(_, _, [], _), do: ""
@@ -1483,12 +1573,12 @@ defmodule SchemaWeb.PageView do
   def profile_links(conn, profile_name, links, list_presentation) do
     groups = Enum.group_by(links, fn link -> link[:group] end)
 
-    commons_html = profile_links_common_to_html(conn, groups[:common])
+    commons_html = profile_links_common_to_html(conn, groups["common"])
 
     classes_html =
-      profile_links_class_to_html(conn, profile_name, groups[:class], list_presentation)
+      profile_links_class_to_html(conn, profile_name, groups["class"], list_presentation)
 
-    objects_html = links_object_to_html(conn, profile_name, groups[:object], list_presentation)
+    objects_html = links_object_to_html(conn, profile_name, groups["object"], list_presentation)
 
     Enum.reject([commons_html, classes_html, objects_html], &Enum.empty?/1)
     |> Enum.intersperse("<hr>")

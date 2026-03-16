@@ -15,23 +15,28 @@ defmodule Schema do
   Contexts are also responsible for managing your data, regardless
   if it comes from the database, an external API or others.
   """
-  alias Schema.Repo
-  alias Schema.Cache
+
+  alias Schema.SingleRepo
   alias Schema.Utils
+  require Logger
 
   @dialyzer :no_improper_lists
 
   @doc """
-    Returns the schema version string.
+  Returns the schema version string.
   """
-  @spec version :: String.t()
-  def version(), do: Repo.version()
+  @spec version() :: String.t()
+  def version() do
+    SingleRepo.version()
+  end
 
-  @spec parsed_version :: Utils.version_or_error_t()
-  def parsed_version(), do: Repo.parsed_version()
+  @spec parsed_version() :: Utils.version_t()
+  def parsed_version() do
+    SingleRepo.parsed_version()
+  end
 
-  @spec build_version :: String.t()
-  def build_version() do
+  @spec server_version() :: String.t()
+  def server_version() do
     Application.spec(:schema_server)
     |> Keyword.get(:vsn)
     |> to_string()
@@ -39,111 +44,175 @@ defmodule Schema do
   end
 
   @doc """
-    Returns the schema extensions.
+  Returns the entire schema. Useful for pages making a lot of iteretive calls that need schema
+  information.
   """
-  @spec extensions :: map()
-  def extensions(), do: Cache.extensions()
-
-  @doc """
-    Returns the schema profiles.
-  """
-  @spec profiles :: map()
-  def profiles(), do: Repo.profiles()
-
-  @spec profiles(Repo.extensions_t()) :: map()
-  def profiles(extensions) do
-    Repo.profiles(extensions)
-  end
-
-  def profile(profiles, name) do
-    case profiles[name] do
-      nil ->
-        nil
-
-      profile ->
-        Map.update!(profile, :attributes, &Schema.Utils.add_sibling_of_to_attributes/1)
-    end
+  @spec schema() :: map()
+  def schema() do
+    SingleRepo.schema()
   end
 
   @doc """
-    Reloads the event schema without the extensions.
+  Returns the entire clean schema, without browser information. Useful for API handlers that
+  make many iterative calls that needs schema information.
+  """
+  @spec schema() :: map()
+  def clean_schema() do
+    SingleRepo.clean_schema()
+  end
+
+  @doc """
+  Returns the data types themselves (without the top level types caption, description, etc.).
+  """
+  @spec clean_data_types_attributes() :: any
+  def clean_data_types_attributes() do
+    SingleRepo.clean_dictionary()[:types][:attributes]
+  end
+
+  @doc """
+  Returns the schema extensions.
+  """
+  @spec extensions() :: map()
+  def extensions() do
+    # Note: SingleRepo.extensions() and SingleRepo.clean_extensions() return the same data.
+    #       The difference is intent, with "clean" being ideal for APIs.
+    SingleRepo.extensions()
+  end
+
+  @doc """
+  Returns the schema extensions.
+  """
+  @spec clean_extensions() :: map()
+  def clean_extensions() do
+    # Note: SingleRepo.extensions() and SingleRepo.clean_extensions() return the same data.
+    #       The difference is intent, with "clean" being ideal for APIs.
+    SingleRepo.clean_extensions()
+  end
+
+  @doc """
+  Returns the schema profiles without browser information.
+  """
+  @spec clean_profiles() :: map()
+  def clean_profiles() do
+    SingleRepo.clean_profiles()
+  end
+
+  @doc """
+  Returns the schema profiles filtered, with browser information.
+  """
+  @spec profiles_filter_extensions(Utils.string_set_t() | nil) :: map()
+  def profiles_filter_extensions(extensions) do
+    SingleRepo.profiles() |> Utils.filter_items_by_extensions(extensions)
+  end
+
+  @doc """
+  Returns the schema profiles filtered, without browser information.
+  """
+  @spec clean_profiles_filter_extensions(Utils.string_set_t() | nil) :: map()
+  def clean_profiles_filter_extensions(extensions) do
+    SingleRepo.clean_profiles() |> Utils.filter_items_by_extensions(extensions)
+  end
+
+  @doc """
+  Reloads the event schema without the extensions.
   """
   @spec reload() :: :ok
-  def reload(), do: Repo.reload()
+  def reload() do
+    SingleRepo.reload()
+  end
 
   @doc """
-    Reloads the event schema with extensions from the given path.
+  Reloads the event schema with extensions from the given path.
   """
   @spec reload(String.t() | list()) :: :ok
-  def reload(path), do: Repo.reload(path)
+  def reload(path) do
+    SingleRepo.reload(path)
+  end
 
   @doc """
-    Returns the event categories.
+  Returns the event categories defined in the given extension set.
   """
-  @spec categories :: map()
-  def categories(), do: Repo.categories()
+  @spec clean_categories_filter_extensions(Utils.string_set_t() | nil) :: map()
+  def clean_categories_filter_extensions(extensions) do
+    schema = SingleRepo.clean_schema()
 
-  @doc """
-    Returns the event categories defined in the given extension set.
-  """
-  def categories(extensions) do
-    Map.update(Repo.categories(extensions), :attributes, %{}, fn attributes ->
-      Enum.into(attributes, %{}, fn {name, _category} ->
-        {name, category(extensions, name)}
+    schema[:categories]
+    |> Map.update!(:attributes, fn attributes ->
+      Utils.filter_items_by_extensions(attributes, extensions)
+      |> Enum.into(%{}, fn {category_name, _category} ->
+        {
+          category_name,
+          category_with_classes_filter_extension(schema, Utils.to_uid(category_name), extensions)
+        }
       end)
     end)
   end
 
-  @doc """
-    Returns a single category with its classes.
-  """
-  @spec category(atom | String.t()) :: nil | Cache.category_t()
-  def category(id), do: get_category(Utils.to_uid(id))
-
-  @spec category(Repo.extensions_t(), String.t()) :: nil | Cache.category_t()
-  def category(extensions, id), do: get_category(extensions, Utils.to_uid(id))
-
-  @spec category(Repo.extensions_t(), String.t(), String.t()) :: nil | Cache.category_t()
-  def category(extensions, extension, id),
-    do: get_category(extensions, Utils.to_uid(extension, id))
-
-  @doc """
-    Returns the attribute dictionary.
-  """
-  @spec dictionary() :: Cache.dictionary_t()
-  def dictionary(), do: Repo.dictionary()
-
-  @doc """
-    Returns the attribute dictionary including the extension.
-  """
-  @spec dictionary(Repo.extensions_t()) :: Cache.dictionary_t()
-  def dictionary(extensions) do
-    Repo.dictionary(extensions)
-    |> Map.update!(:attributes, &Schema.Utils.add_sibling_of_to_attributes/1)
+  @spec clean_category_filter_extensions(
+          atom(),
+          Utils.string_set_t() | nil
+        ) :: nil | Utils.category_t()
+  def clean_category_filter_extensions(id, extensions) do
+    category_with_classes_filter_extension(SingleRepo.clean_schema(), id, extensions)
   end
 
   @doc """
-    Returns the data types defined in dictionary.
+  Returns the attribute dictionary.
   """
-  @spec data_types :: map()
-  def data_types(), do: Repo.data_types()
+  @spec dictionary() :: Utils.dictionary_t()
+  def dictionary() do
+    SingleRepo.dictionary()
+  end
 
-  @spec data_type?(binary(), binary() | list(binary())) :: boolean()
-  def data_type?(type, type), do: true
+  @doc """
+  Returns the attribute dictionary including the extension.
+  Used for the dictionary attributes page.
+  """
+  @spec dictionary_filter_extensions(Utils.string_set_t(), map()) :: Utils.dictionary_t()
+  def dictionary_filter_extensions(extensions, schema) do
+    schema[:dictionary]
+    |> Map.update!(:attributes, fn attributes ->
+      Utils.filter_items_by_extensions(attributes, extensions)
+    end)
+  end
 
-  def data_type?(type, base_type) when is_binary(base_type) do
-    types = Map.get(Repo.data_types(), :attributes)
+  @doc """
+  Returns the attribute dictionary including the extension, without browser information.
+  """
+  @spec clean_dictionary_filter_extensions(Utils.string_set_t()) :: Utils.dictionary_t()
+  def clean_dictionary_filter_extensions(extensions) do
+    SingleRepo.clean_dictionary()
+    |> Map.update!(:attributes, fn attributes ->
+      Utils.filter_items_by_extensions(attributes, extensions)
+    end)
+  end
 
-    case Map.get(types, String.to_atom(type)) do
+  @doc """
+  Returns the data types defined in dictionary. Used for data types page.
+  """
+  @spec data_types() :: map()
+  def data_types() do
+    SingleRepo.dictionary()[:types]
+  end
+
+  @doc """
+  Parameter 1 must be the actual data types as from Schema.clean_data_types_attributes/0.
+  Returns true if parameter 2 (type) is valid against parameter 3 (base type)
+  """
+  @spec data_type?(map(), String.t(), String.t() | list(String.t())) :: boolean()
+  def data_type?(_data_types, type, type) do
+    true
+  end
+
+  def data_type?(data_types, type, base_type) when is_binary(base_type) do
+    case Map.get(data_types, String.to_atom(type)) do
       nil -> false
       data -> data[:type] == base_type
     end
   end
 
-  def data_type?(type, base_types) do
-    types = Map.get(Repo.data_types(), :attributes)
-
-    case Map.get(types, String.to_atom(type)) do
+  def data_type?(data_types, type, base_types) do
+    case Map.get(data_types, String.to_atom(type)) do
       nil ->
         false
 
@@ -154,335 +223,419 @@ defmodule Schema do
   end
 
   @doc """
-    Returns all event classes.
+  Returns all event classes.
   """
   @spec classes() :: map()
-  def classes(), do: Repo.classes()
+  def classes() do
+    SingleRepo.classes()
+  end
 
-  @spec classes(Repo.extensions_t()) :: map()
-  def classes(extensions), do: Repo.classes(extensions)
+  @spec clean_classes_filter_extensions(Utils.string_set_t() | nil) :: map()
+  def clean_classes_filter_extensions(extensions) do
+    SingleRepo.clean_classes() |> Utils.filter_items_by_extensions(extensions)
+  end
 
-  @spec classes(Repo.extensions_t(), Repo.profiles_t()) :: map()
-  def classes(extensions, profiles) do
-    extensions
-    |> Repo.classes()
-    |> apply_profiles(profiles, MapSet.size(profiles))
+  @doc """
+  Returns clean classes (without browser information) filtered by extensions and profiles.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
+  """
+  @spec clean_classes_filter_extensions_profiles(
+          Utils.string_set_t() | nil,
+          Utils.string_set_t() | nil
+        ) :: map()
+  def clean_classes_filter_extensions_profiles(extensions, profiles) do
+    clean_classes_filter_extensions(extensions)
+    |> Utils.filter_items_attributes_by_profiles(profiles)
   end
 
   @spec all_classes() :: map()
-  def all_classes(), do: Repo.all_classes()
+  def all_classes() do
+    SingleRepo.all_classes()
+  end
 
   @spec all_objects() :: map()
-  def all_objects(), do: Repo.all_objects()
+  def all_objects() do
+    SingleRepo.all_objects()
+  end
 
   @doc """
-    Returns a single event class.
+  Returns a single event class.
   """
-  @spec class(atom() | String.t()) :: nil | Cache.class_t()
-  def class(id), do: Repo.class(Utils.to_uid(id))
+  @spec class(atom() | String.t()) :: nil | Utils.class_t()
+  def class(id) do
+    SingleRepo.clean_classes()[Utils.to_uid(id)]
+  end
 
-  @spec class(nil | String.t(), String.t()) :: nil | map()
-  def class(extension, id),
-    do: Repo.class(Utils.to_uid(extension, id))
+  @doc """
+  Returns class with attributes filtered by profiles.
+  This is meant for the class page. When profiles is nil, it is treated like an empty set.
+  """
+  @spec class_filter_profiles(
+          map(),
+          atom(),
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def class_filter_profiles(schema, id, nil) do
+    schema[:classes][id]
+  end
 
-  @spec class(String.t() | nil, String.t(), Repo.profiles_t() | nil) :: nil | map()
-  def class(extension, id, nil), do: class(extension, id)
-
-  def class(extension, id, profiles) do
-    case class(extension, id) do
+  def class_filter_profiles(schema, id, profiles) do
+    case schema[:classes][id] do
       nil ->
         nil
 
       class ->
-        Map.update!(class, :attributes, fn attributes ->
-          Utils.apply_profiles(attributes, profiles)
-        end)
+        if profiles do
+          Utils.filter_item_attributes_by_profiles(class, profiles)
+        else
+          Utils.filter_item_attributes_by_profiles(class, MapSet.new([]))
+        end
     end
   end
 
   @doc """
-    Returns a single event class with the embedded objects.
+  Returns class with attributes filtered by profiles, without browser info.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
-  @spec class_ex(atom() | String.t()) :: nil | Cache.class_t()
-  def class_ex(id),
-    do: Repo.class_ex(Utils.to_uid(id))
+  @spec clean_class_filter_profiles(
+          atom(),
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def clean_class_filter_profiles(id, nil) do
+    SingleRepo.clean_classes()[id]
+  end
 
-  @spec class_ex(nil | String.t(), String.t()) :: nil | map()
-  def class_ex(extension, id),
-    do: Repo.class_ex(Utils.to_uid(extension, id))
-
-  @spec class_ex(String.t() | nil, String.t(), Repo.profiles_t() | nil) :: nil | map()
-  def class_ex(extension, id, nil),
-    do: class_ex(extension, id)
-
-  def class_ex(extension, id, profiles) do
-    case class_ex(extension, id) do
+  def clean_class_filter_profiles(id, profiles) do
+    case SingleRepo.clean_classes()[id] do
       nil ->
         nil
 
       class ->
-        Schema.Profiles.apply_profiles(class, profiles)
+        Utils.filter_item_attributes_by_profiles(class, profiles)
     end
   end
 
   @doc """
   Finds a class by the class uid value.
   """
-  @spec find_class(integer()) :: nil | Cache.class_t()
-  def find_class(uid) when is_integer(uid), do: Repo.find_class(uid)
+  @spec find_class(integer()) :: nil | Utils.class_t()
+  def find_class(uid) when is_integer(uid) do
+    case Enum.find(SingleRepo.clean_classes(), fn {_, class} -> class[:uid] == uid end) do
+      {_, class} -> class
+      nil -> nil
+    end
+  end
 
-  @doc """
-    Returns all objects.
-  """
-  @spec objects() :: map()
-  def objects(), do: Repo.objects()
+  @spec objects_filter_extensions(Utils.string_set_t() | nil) :: map()
+  def objects_filter_extensions(extensions) do
+    SingleRepo.objects() |> Utils.filter_items_by_extensions(extensions)
+  end
 
-  @spec objects(Repo.extensions_t()) :: map()
-  def objects(extensions), do: Repo.objects(extensions)
-
-  @spec objects(Repo.extensions_t(), Repo.profiles_t()) :: map()
-  def objects(extensions, profiles) do
-    extensions
-    |> Repo.objects()
-    |> apply_profiles(profiles, MapSet.size(profiles))
+  @spec clean_objects_filter_extensions(Utils.string_set_t() | nil) :: map()
+  def clean_objects_filter_extensions(extensions) do
+    SingleRepo.clean_objects() |> Utils.filter_items_by_extensions(extensions)
   end
 
   @doc """
-    Returns a single object.
+  Returns a single object.
   """
-  @spec object(atom | String.t()) :: nil | Cache.object_t()
-  def object(id),
-    do: Repo.object(Utils.to_uid(id))
-
-  @spec object(nil | String.t(), String.t()) :: nil | map()
-  def object(extension, id) when is_binary(id) do
-    Repo.object(Utils.to_uid(extension, id))
+  @spec object(atom | String.t()) :: nil | Utils.object_t()
+  def object(id) do
+    SingleRepo.clean_objects()[Utils.to_uid(id)]
   end
 
-  @spec object(Repo.extensions_t(), String.t(), String.t()) :: nil | map()
-  def object(extensions, extension, id) when is_binary(id) do
-    Repo.object(extensions, Utils.to_uid(extension, id))
+  @spec object_filter_extensions(
+          map(),
+          atom(),
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  defp object_filter_extensions(schema, id, extensions) do
+    schema[:objects][id]
+    |> Utils.filter_item_links_by_extensions(extensions)
   end
 
-  @spec object(Repo.extensions_t(), String.t(), String.t(), Repo.profiles_t() | nil) ::
-          nil | map()
-  def object(extensions, extension, id, nil),
-    do: object(extensions, extension, id)
-
-  def object(extensions, extension, id, profiles) do
-    case object(extensions, extension, id) do
+  @doc """
+  Returns object filtered by extensions and profiles.
+  This is meant for the object page. When profiles is nil, it is treated same as an empty set.
+  """
+  @spec object_filter_extensions_profiles(
+          map(),
+          atom(),
+          Utils.string_set_t() | nil,
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def object_filter_extensions_profiles(schema, id, extensions, profiles) do
+    case object_filter_extensions(schema, id, extensions) do
       nil ->
         nil
 
       object ->
-        Map.update!(object, :attributes, fn attributes ->
-          Utils.apply_profiles(attributes, profiles)
-        end)
+        if profiles do
+          Utils.filter_item_attributes_by_profiles(object, profiles)
+        else
+          Utils.filter_item_attributes_by_profiles(object, MapSet.new([]))
+        end
     end
   end
 
+  @spec clean_object_filter_extensions(atom(), Utils.string_set_t() | nil) :: nil | map()
+  defp clean_object_filter_extensions(id, extensions) do
+    SingleRepo.clean_objects()[id]
+    |> Utils.filter_item_links_by_extensions(extensions)
+  end
+
   @doc """
-    Returns a single object and with the embedded objects.
+  Returns object filtered by extensions and profiles.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
   """
-  @spec object_ex(atom | String.t()) :: nil | Cache.object_t()
-  def object_ex(id),
-    do: Repo.object_ex(Utils.to_uid(id))
-
-  @spec object_ex(nil | String.t(), String.t()) :: nil | map()
-  def object_ex(extension, id) when is_binary(id) do
-    Repo.object_ex(Utils.to_uid(extension, id))
+  @spec clean_object_filter_extensions_profiles(
+          atom(),
+          Utils.string_set_t() | nil,
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def clean_object_filter_extensions_profiles(id, extensions, nil) do
+    clean_object_filter_extensions(id, extensions)
   end
 
-  @spec object_ex(Repo.extensions_t(), String.t(), String.t()) :: nil | map()
-  def object_ex(extensions, extension, id) when is_binary(id) do
-    Repo.object_ex(extensions, Utils.to_uid(extension, id))
-  end
-
-  @spec object_ex(Repo.extensions_t(), String.t(), String.t(), Repo.profiles_t() | nil) ::
-          nil | map()
-  def object_ex(extensions, extension, id, nil),
-    do: object_ex(extensions, extension, id)
-
-  def object_ex(extensions, extension, id, profiles) do
-    case object_ex(extensions, extension, id) do
+  def clean_object_filter_extensions_profiles(id, extensions, profiles) do
+    case clean_object_filter_extensions(id, extensions) do
       nil ->
         nil
 
       object ->
-        Map.update!(object, :attributes, fn attributes ->
-          Utils.apply_profiles(attributes, profiles)
-        end)
+        Utils.filter_item_attributes_by_profiles(object, profiles)
     end
+  end
+
+  # ---------------------------------------------- #
+  # Class and object with referenced objects       #
+  # as used by JSON Schema generation and graphs   #
+  # ---------------------------------------------- #
+
+  @doc """
+  Returns class with referenced objects, with attributes filtered by profiles.
+  This is meant for APIs. When profiles is nil, attributes are not filtered by profiles.
+  """
+  @spec class_with_referenced_objects_filter_profiles(
+          atom(),
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def class_with_referenced_objects_filter_profiles(id, profiles) do
+    schema = SingleRepo.clean_schema()
+    objects = schema[:objects]
+
+    case schema[:classes][id] do
+      nil ->
+        nil
+
+      class ->
+        class
+        |> Utils.filter_item_attributes_by_profiles(profiles)
+        |> Map.put(
+          :objects,
+          referenced_objects(class, objects)
+          |> Utils.filter_items_attributes_by_profiles(profiles)
+        )
+    end
+  end
+
+  @doc """
+  Returns object with referenced objects, and with attributes filtered by extensions and profiles.
+  When profiles is nil, attributes are not filtered by profiles.
+  """
+  @spec object_with_referenced_objects_filter_extensions_profiles(
+          atom(),
+          Utils.string_set_t() | nil,
+          Utils.string_set_t() | nil
+        ) :: nil | map()
+  def object_with_referenced_objects_filter_extensions_profiles(
+        id,
+        extensions,
+        profiles
+      ) do
+    schema = SingleRepo.clean_schema()
+    objects = schema[:objects]
+
+    case schema[:objects][id] do
+      nil ->
+        nil
+
+      object ->
+        object
+        |> Map.put(:objects, referenced_objects(object, objects))
+        |> Utils.filter_item_links_by_extensions(extensions)
+        |> Utils.filter_item_attributes_by_profiles(profiles)
+    end
+  end
+
+  @spec referenced_objects(map(), map()) :: list()
+  defp referenced_objects(item, schema_objects) do
+    # Referenced objects are returned as a list so JsonSchema.encode_objects can pattern
+    # match on an empty list (pattern matching on %{} matches _all_ maps)
+    Enum.to_list(gather_referenced_objects(item, schema_objects, %{}))
+  end
+
+  @spec gather_referenced_objects(map(), map(), map()) :: map()
+  defp gather_referenced_objects(item, schema_objects, referenced_objects) do
+    Enum.reduce(
+      item[:attributes],
+      referenced_objects,
+      fn {_attribute_name, attribute}, referenced_objects ->
+        case attribute[:object_type] do
+          nil ->
+            referenced_objects
+
+          object_type ->
+            object_name = String.to_atom(object_type)
+
+            if Map.has_key?(referenced_objects, object_name) do
+              referenced_objects
+            else
+              object = schema_objects[object_name]
+              referenced_objects = Map.put(referenced_objects, object_name, object)
+              gather_referenced_objects(object, schema_objects, referenced_objects)
+            end
+        end
+      end
+    )
   end
 
   # ------------------#
   # Export Functions #
   # ------------------#
 
-  defp cleanup_dictionary_attributes(attributes) do
-    Enum.reduce(
-      attributes,
-      %{},
-      fn {attribute_key, attribute}, attributes ->
-        Map.put(
-          attributes,
-          attribute_key,
-          Enum.reduce(
-            attribute,
-            %{},
-            fn {k, v}, attribute ->
-              if Atom.to_string(k) |> String.starts_with?("_") do
-                attribute
-              else
-                Map.put(attribute, k, v)
-              end
-            end
-          )
+  @spec legacy_export_convert(map(), String.t()) :: map()
+  defp legacy_export_convert(items, kind) do
+    Enum.reduce(items, %{}, fn {item_name, item}, items ->
+      Map.put(items, item_name, legacy_export_convert_attributes(item, kind, item_name))
+    end)
+  end
+
+  @spec legacy_export_convert_attributes(map(), String.t(), atom()) :: map()
+  defp legacy_export_convert_attributes(item, kind, item_name) do
+    Map.update(item, :attributes, %{}, fn attributes ->
+      Enum.reduce(attributes, %{}, fn {attribute_name, attribute}, attributes ->
+        attribute =
+          case attribute[:profiles] do
+            nil ->
+              attribute
+
+            [profile] ->
+              Map.put(attribute, :profile, profile)
+
+            profiles ->
+              raise "Cannot export in the legacy format. #{kind} \"#{item_name}\"" <>
+                      " attribute \"#{attribute_name}\" is invoked by multiple" <>
+                      " profiles: #{inspect(profiles)}. The legacy format only supports one."
+          end
+
+        Map.put(attributes, attribute_name, attribute)
+      end)
+    end)
+  end
+
+  @spec legacy_export_schema(
+          Utils.string_set_t() | nil,
+          Utils.string_set_t() | nil
+        ) :: %{
+          base_event: map(),
+          classes: map(),
+          objects: map(),
+          types: map(),
+          dictionary_attributes: map(),
+          version: String.t()
+        }
+  def legacy_export_schema(extensions, profiles) do
+    schema = SingleRepo.clean_schema()
+
+    classes =
+      schema[:classes]
+      |> Utils.filter_clean_items_by_extensions(extensions)
+      |> Utils.filter_items_attributes_by_profiles(profiles)
+      |> legacy_export_convert("Class")
+
+    objects =
+      schema[:objects]
+      |> Utils.filter_clean_items_by_extensions(extensions)
+      |> Utils.filter_items_attributes_by_profiles(profiles)
+      |> legacy_export_convert("Object")
+
+    dictionary_attributes =
+      Utils.filter_clean_items_by_extensions(schema[:dictionary][:attributes], extensions)
+
+    %{
+      base_event: classes[:base_event],
+      classes: classes,
+      objects: objects,
+      types: schema[:dictionary][:types][:attributes],
+      dictionary_attributes: dictionary_attributes,
+      version: schema[:version]
+    }
+  end
+
+  @spec legacy_export_classes(
+          Utils.string_set_t() | nil,
+          Utils.string_set_t() | nil
+        ) :: map()
+  def legacy_export_classes(extensions, nil) do
+    SingleRepo.clean_classes()
+    |> Utils.filter_clean_items_by_extensions(extensions)
+    |> legacy_export_convert("Class")
+  end
+
+  def legacy_export_classes(extensions, profiles) do
+    SingleRepo.clean_classes()
+    |> Utils.filter_clean_items_by_extensions(extensions)
+    |> Utils.filter_items_attributes_by_profiles(profiles)
+    |> legacy_export_convert("Class")
+  end
+
+  @spec legacy_export_base_event(Utils.string_set_t() | nil) :: map()
+  def legacy_export_base_event(nil) do
+    SingleRepo.clean_classes()[:base_event]
+    |> legacy_export_convert_attributes("Class", :base_event)
+  end
+
+  def legacy_export_base_event(profiles) do
+    SingleRepo.clean_classes()[:base_event]
+    |> Utils.filter_item_attributes_by_profiles(profiles)
+    |> legacy_export_convert_attributes("Class", :base_event)
+  end
+
+  @spec legacy_export_objects(
+          Utils.string_set_t(),
+          Utils.string_set_t() | nil
+        ) :: map()
+  def legacy_export_objects(extensions, nil) do
+    SingleRepo.clean_objects()
+    |> Utils.filter_clean_items_by_extensions(extensions)
+    |> legacy_export_convert("Object")
+  end
+
+  def legacy_export_objects(extensions, profiles) do
+    SingleRepo.clean_objects()
+    |> Utils.filter_clean_items_by_extensions(extensions)
+    |> Utils.filter_items_attributes_by_profiles(profiles)
+    |> legacy_export_convert("Object")
+  end
+
+  @spec export_schema() :: map()
+  def export_schema() do
+    # Clean schema is almost exactly what we want to match the modern output of the
+    # ocsf-schema-compiler, _except_ profiles contain attributes.
+    Map.update!(
+      SingleRepo.clean_schema(),
+      :profiles,
+      fn profiles ->
+        Enum.reduce(
+          profiles,
+          %{},
+          fn {profile_name, profile}, profiles ->
+            Map.put(profiles, profile_name, Map.delete(profile, :attributes))
+          end
         )
       end
     )
-  end
-
-  defp export_dictionary_attributes() do
-    dictionary()[:attributes] |> cleanup_dictionary_attributes()
-  end
-
-  defp export_dictionary_attributes(extensions) do
-    dictionary(extensions)[:attributes] |> cleanup_dictionary_attributes()
-  end
-
-  @doc """
-    Exports the schema, including data types, objects, and classes.
-  """
-  @spec export_schema() :: %{
-          base_event: map(),
-          classes: map(),
-          objects: map(),
-          types: map(),
-          dictionary_attributes: map(),
-          version: String.t()
-        }
-  def export_schema() do
-    %{
-      base_event: Schema.export_base_event(),
-      classes: Schema.export_classes(),
-      objects: Schema.export_objects(),
-      types: Schema.export_data_types(),
-      dictionary_attributes: export_dictionary_attributes(),
-      version: Schema.version()
-    }
-  end
-
-  @spec export_schema(Repo.extensions_t()) :: %{
-          base_event: map(),
-          classes: map(),
-          objects: map(),
-          types: map(),
-          dictionary_attributes: map(),
-          version: String.t()
-        }
-  def export_schema(extensions) do
-    %{
-      base_event: Schema.export_base_event(),
-      classes: Schema.export_classes(extensions),
-      objects: Schema.export_objects(extensions),
-      types: Schema.export_data_types(),
-      dictionary_attributes: export_dictionary_attributes(extensions),
-      version: Schema.version()
-    }
-  end
-
-  @spec export_schema(Repo.extensions_t(), Repo.profiles_t() | nil) :: %{
-          base_event: map(),
-          classes: map(),
-          objects: map(),
-          types: map(),
-          dictionary_attributes: map(),
-          version: String.t()
-        }
-  def export_schema(extensions, nil) do
-    export_schema(extensions)
-  end
-
-  def export_schema(extensions, profiles) do
-    %{
-      base_event: Schema.export_base_event(profiles),
-      classes: Schema.export_classes(extensions, profiles),
-      objects: Schema.export_objects(extensions, profiles),
-      types: Schema.export_data_types(),
-      dictionary_attributes: export_dictionary_attributes(extensions),
-      version: Schema.version()
-    }
-  end
-
-  @doc """
-    Exports the data types.
-  """
-  @spec export_data_types :: any
-  def export_data_types() do
-    Map.get(data_types(), :attributes)
-  end
-
-  @doc """
-    Exports the classes.
-  """
-  @spec export_classes() :: map()
-  def export_classes(), do: Repo.export_classes() |> reduce_objects()
-
-  @spec export_classes(Repo.extensions_t()) :: map()
-  def export_classes(extensions), do: Repo.export_classes(extensions) |> reduce_objects()
-
-  @spec export_classes(Repo.extensions_t(), Repo.profiles_t() | nil) :: map()
-  def export_classes(extensions, nil), do: export_classes(extensions)
-
-  def export_classes(extensions, profiles) do
-    Repo.export_classes(extensions) |> update_exported_classes(profiles)
-  end
-
-  @spec export_base_event() :: map()
-  def export_base_event() do
-    Repo.export_base_event()
-    |> reduce_attributes()
-    |> Map.update!(:attributes, fn attributes ->
-      Utils.remove_profiles(attributes) |> Enum.into(%{})
-    end)
-  end
-
-  @spec export_base_event(Repo.profiles_t() | nil) :: map()
-  def export_base_event(nil) do
-    export_base_event()
-  end
-
-  def export_base_event(profiles) do
-    size = MapSet.size(profiles)
-
-    Repo.export_base_event()
-    |> reduce_attributes()
-    |> Map.update!(:attributes, fn attributes ->
-      Utils.apply_profiles(attributes, profiles, size) |> Enum.into(%{})
-    end)
-  end
-
-  defp update_exported_classes(classes, profiles) do
-    apply_profiles(classes, profiles, MapSet.size(profiles)) |> reduce_objects()
-  end
-
-  @doc """
-    Exports the objects.
-  """
-  @spec export_objects() :: map()
-  def export_objects(), do: Repo.export_objects() |> reduce_objects()
-
-  @spec export_objects(Repo.extensions_t()) :: map()
-  def export_objects(extensions), do: Repo.export_objects(extensions) |> reduce_objects()
-
-  @spec export_objects(Repo.extensions_t(), Repo.profiles_t() | nil) :: map()
-  def export_objects(extensions, nil), do: export_objects(extensions)
-
-  def export_objects(extensions, profiles) do
-    Repo.export_objects(extensions)
-    |> apply_profiles(profiles, MapSet.size(profiles))
-    |> reduce_objects()
   end
 
   # ----------------------------#
@@ -498,21 +651,9 @@ defmodule Schema do
   # -------------------------------#
 
   @doc """
-  Returns a randomly generated sample event.
-  """
-  @spec generate_event(Cache.class_t() | atom() | binary()) :: nil | map()
-  def generate_event(class) when is_map(class) do
-    Schema.Generator.generate_sample_event(class, nil)
-  end
-
-  def generate_event(class) do
-    Schema.class(class) |> Schema.Generator.generate_sample_event(nil)
-  end
-
-  @doc """
   Returns a randomly generated sample event, based on the spcified profiles.
   """
-  @spec generate_event(Cache.class_t(), Repo.profiles_t() | nil) :: map()
+  @spec generate_event(Utils.class_t(), Utils.string_set_t() | nil) :: map()
   def generate_event(class, profiles) when is_map(class) do
     Schema.Generator.generate_sample_event(class, profiles)
   end
@@ -520,7 +661,7 @@ defmodule Schema do
   @doc """
   Returns randomly generated sample object data.
   """
-  @spec generate_object(Cache.object_t() | atom() | binary()) :: any()
+  @spec generate_object(Utils.object_t() | atom() | binary()) :: any()
   def generate_object(type) when is_map(type) do
     Schema.Generator.generate_sample_object(type, nil)
   end
@@ -532,93 +673,63 @@ defmodule Schema do
   @doc """
   Returns randomly generated sample object data, based on the spcified profiles.
   """
-  @spec generate_object(Cache.object_t(), Repo.profiles_t() | nil) :: map()
+  @spec generate_object(Utils.object_t(), Utils.string_set_t() | nil) :: map()
   def generate_object(type, profiles) when is_map(type) do
     Schema.Generator.generate_sample_object(type, profiles)
   end
 
-  defp get_category(id) do
-    Repo.category(id) |> reduce_category()
-  end
+  @spec category_with_classes_filter_extension(
+          map(),
+          atom(),
+          Utils.string_set_t() | nil
+        ) :: map() | nil
+  defp category_with_classes_filter_extension(schema, id, extensions) do
+    case schema[:categories][:attributes][id] do
+      nil ->
+        nil
 
-  defp get_category(extensions, id) do
-    Repo.category(extensions, id) |> reduce_category()
-  end
+      category ->
+        classes =
+          schema[:classes]
+          |> Utils.filter_items_by_extensions(extensions)
+          |> Map.delete(:attributes)
+          |> Map.delete(:associations)
 
-  defp reduce_category(nil) do
-    nil
-  end
+        category_uid = Atom.to_string(id)
 
-  defp reduce_category(data) do
-    Map.update(data, :classes, [], fn classes ->
-      Enum.into(classes, %{}, fn {name, class} ->
-        {name, reduce_class(class)}
-      end)
-    end)
-  end
+        classes_list =
+          classes
+          |> Stream.filter(fn {_name, class} ->
+            cat = Map.get(class, :category)
+            cat == category_uid or Utils.to_uid(cat) == id
+          end)
+          |> Stream.map(fn {name, class} ->
+            class =
+              class
+              |> Map.delete(:category)
+              |> Map.delete(:category_name)
 
-  defp reduce_objects(objects) do
-    Enum.into(objects, %{}, fn {name, object} ->
-      updated = reduce_attributes(object)
+            {name, class}
+          end)
+          |> Enum.to_list()
 
-      {name, updated}
-    end)
-  end
-
-  defp reduce_data(object) do
-    Map.drop(object, internal_keys(object))
-  end
-
-  defp internal_keys(map) do
-    Enum.filter(Map.keys(map), fn key ->
-      String.starts_with?(to_string(key), "_")
-    end)
-  end
-
-  defp reduce_attributes(data) do
-    reduce_data(data)
-    |> Map.update(:attributes, [], fn attributes ->
-      Enum.into(attributes, %{}, fn {attribute_name, attribute_details} ->
-        {attribute_name, reduce_attribute(attribute_details)}
-      end)
-    end)
-  end
-
-  defp reduce_attribute(attribute_details) do
-    attribute_details
-    |> filter_internal()
-    |> reduce_enum()
-  end
-
-  defp filter_internal(m) do
-    Map.filter(m, fn {key, _} ->
-      s = Atom.to_string(key)
-      not String.starts_with?(s, "_")
-    end)
-  end
-
-  defp reduce_enum(attribute_details) do
-    if Map.has_key?(attribute_details, :enum) do
-      Map.update!(attribute_details, :enum, fn enum ->
-        Enum.map(
-          enum,
-          fn {enum_value_key, enum_value_details} ->
-            {
-              enum_value_key,
-              filter_internal(enum_value_details)
-            }
-          end
+        category
+        |> Map.put(:name, category_uid)
+        # Change classes_list to a map while reducing each class
+        |> Map.put(
+          :classes,
+          Enum.into(classes_list, %{}, fn {name, class} ->
+            {name, reduce_class(class)}
+          end)
         )
-        |> Enum.into(%{})
-      end)
-    else
-      attribute_details
     end
   end
 
   @spec reduce_class(map) :: map
   def reduce_class(data) do
-    delete_attributes(data) |> delete_associations()
+    data
+    |> delete_attributes()
+    |> delete_associations()
   end
 
   @spec delete_attributes(map) :: map
@@ -627,47 +738,7 @@ defmodule Schema do
   end
 
   @spec delete_associations(map) :: map
-  def delete_associations(data) do
+  defp delete_associations(data) do
     Map.delete(data, :associations)
-  end
-
-  @spec delete_links(map) :: map
-  def delete_links(data) do
-    Map.delete(data, :_links)
-  end
-
-  @spec deep_clean(map()) :: map()
-  def deep_clean(data) do
-    reduce_attributes(data)
-  end
-
-  def apply_profiles(types, _profiles, 0) do
-    Enum.into(types, %{}, fn {name, type} ->
-      remove_profiles(name, type)
-    end)
-  end
-
-  def apply_profiles(types, profiles, size) do
-    Enum.into(types, %{}, fn {name, type} ->
-      apply_profiles(name, type, profiles, size)
-    end)
-  end
-
-  defp apply_profiles(name, type, profiles, size) do
-    {
-      name,
-      Map.update!(type, :attributes, fn attributes ->
-        Utils.apply_profiles(attributes, profiles, size)
-      end)
-    }
-  end
-
-  defp remove_profiles(name, type) do
-    {
-      name,
-      Map.update!(type, :attributes, fn attributes ->
-        Utils.remove_profiles(attributes)
-      end)
-    }
   end
 end
