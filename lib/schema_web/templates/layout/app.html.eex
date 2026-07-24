@@ -64,8 +64,9 @@ limitations under the License.
           if (!href || href.startsWith('http') || href.startsWith('#') || href.startsWith('javascript:')) {
             return;
           }
+          const schemaPath = href.replace(/^\/[\d.]+(?:-[^\/]+)?(?=\/)/, '');
           // Only update internal schema navigation links
-          if (href.match(/^\/(classes|objects|categories|profiles|dictionary|data_types|visualizer)/)) {
+          if (schemaPath.match(/^\/(classes|objects|categories|profiles|dictionary|data_types|visualizer)(?:\/|\?|$)/)) {
             const joiner = href.includes('?') ? '&' : '';
             this.href = this.href + (joiner ? params.replace('?', '&') : params);
           }
